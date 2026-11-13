@@ -1,0 +1,131 @@
+/* ==========================================================================
+   AURA Search · Motion
+   模块一 06｜动效与交互规范
+
+   唤起：opacity 0→1，scale .97→1，Y 8→0，160–200ms，轻弹簧，不弹跳
+   隐藏：opacity 1→0，scale 1→.98，Y 0→4，100–140ms
+   列表 hover 100–150ms，面板切换 180–220ms
+   ========================================================================== */
+
+@keyframes aura-show {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes aura-hide {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+
+@keyframes aura-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes aura-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes aura-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 窗口状态：由 React 根据 launcher:show / launcher:hide 事件驱动，
+   动画结束（animationend）后才回传 animation-finished 给 Rust 做原生 hide。 */
+.launcher[data-phase="showing"] {
+  animation: aura-show var(--dur-show) var(--ease-spring) both;
+}
+
+.launcher[data-phase="hiding"] {
+  animation: aura-hide var(--dur-hide) var(--ease-in) both;
+  pointer-events: none;
+}
+
+.launcher[data-phase="visible"] {
+  opacity: 1;
+  transform: none;
+}
+
+/* 结果列表：仅在内容变化时做一次极短的进入，避免每次输入都抖动 */
+.results-enter {
+  animation: aura-fade-in 120ms var(--ease-out) both;
+}
+
+/* 预览抽屉与设置面板 */
+.drawer {
+  animation: aura-rise var(--dur-panel) var(--ease-out) both;
+}
+
+.panel {
+  animation: aura-panel-in var(--dur-panel) var(--ease-out) both;
+}
+
+/* 选中行的高亮不做霓虹，用位移 + 底色过渡 */
+.result {
+  transition:
+    background-color var(--dur-hover) ease,
+    border-color var(--dur-hover) ease,
+    color var(--dur-hover) ease;
+}
+
+.interactive {
+  transition:
+    background-color var(--dur-hover) ease,
+    color var(--dur-hover) ease,
+    border-color var(--dur-hover) ease,
+    box-shadow var(--dur-hover) ease,
+    opacity var(--dur-hover) ease;
+}
+
+/* 视图切换（结果 ↔ 预览） */
+@media (prefers-reduced-motion: no-preference) {
+  .stagger > * {
+    animation: aura-rise 200ms var(--ease-out) both;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger > *:nth-child(2) { animation-delay: 18ms; }
+  .stagger > *:nth-child(3) { animation-delay: 36ms; }
+  .stagger > *:nth-child(4) { animation-delay: 54ms; }
+  .stagger > *:nth-child(5) { animation-delay: 72ms; }
+}
+
+:root[data-motion="reduced"] .launcher,
+:root[data-motion="reduced"] .panel,
+:root[data-motion="reduced"] .drawer,
+:root[data-motion="reduced"] .stagger > * {
+  animation: none !important;
+}
+
+@keyframes aura-spin {
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,38 @@
+{
+  "name": "tracefind",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "dev:web": "vite --host 127.0.0.1 --port 1420 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "build:desktop": "tauri build --no-bundle",
+    "verify:ui": "node tools/verify-ui.mjs",
+    "verify:m2": "node tools/verify-m2.mjs 9223",
+    "verify:m3": "node tools/verify-m3.mjs 9223",
+    "measure:search": "node tools/measure-search.mjs 9223",
+    "verify:lifecycle": "node tools/verify-lifecycle.mjs 9223",
+    "verify:settings": "node tools/verify-settings-window.mjs 9223",
+    "measure:latency": "node tools/measure-launcher-latency.mjs 9223"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "lucide-react": "^0.468.0",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5.9",
+    "vite": "^7"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

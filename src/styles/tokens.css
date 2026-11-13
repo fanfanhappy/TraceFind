@@ -1,0 +1,142 @@
+/* ==========================================================================
+   AURA Search · Design Tokens
+   模块一 03｜视觉系统与色彩规范
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* 字体：优先 Segoe UI Variable，中文回退 Microsoft YaHei UI */
+  --font-ui: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI",
+    "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI",
+    "Microsoft YaHei UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+
+  /* 深色主题（说明书给定色值） */
+  --bg: #17191f;
+  --panel: #22252e;
+  --floating: #30343f;
+  --border: #414654;
+  --border-soft: #343948;
+  --accent: #8b8cff;
+  --accent-soft: #6d9eff;
+  --accent-alt: #a99aff;
+  --success: #6bcbaa;
+  --warning: #e8b478;
+  --danger: #f0838c;
+  --text: #f2f3f7;
+  --text-secondary: #a4a9b6;
+  --text-subtle: #7f8594;
+
+  /* 强调色的半透明派生（避开大面积高饱和与过度发光） */
+  --accent-06: rgb(139 140 255 / 6%);
+  --accent-10: rgb(139 140 255 / 10%);
+  --accent-16: rgb(139 140 255 / 16%);
+  --accent-28: rgb(139 140 255 / 28%);
+  --accent-55: rgb(139 140 255 / 55%);
+
+  /* 层次与阴影 */
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 24%);
+  --shadow-2: 0 8px 24px rgb(0 0 0 / 28%);
+  --shadow-3: 0 24px 64px rgb(0 0 0 / 44%);
+  --ring: 0 0 0 3px var(--accent-16);
+
+  /* 玻璃质感 */
+  --glass-tint: rgb(23 25 31 / 78%);
+  --glass-panel: rgb(34 37 46 / 86%);
+  --glass-sheen: rgb(255 255 255 / 6%);
+  --glass-blur: 28px;
+  /* 原生材质生效时，窗口底色压在自己身上的比例（浅色要更实，否则一片灰） */
+  --shell-tint: 74%;
+  /* 顶部冷光强度：深色可以稍亮，浅色必须很弱，否则整窗发灰紫 */
+  --shell-glow: 10%;
+
+  /* 圆角：主窗口 16–20，输入框 12–14，列表项 9–12 */
+  --radius-window: 18px;
+  --radius-panel: 14px;
+  --radius-field: 13px;
+  --radius-item: 10px;
+  --radius-control: 8px;
+  --radius-pill: 999px;
+
+  /* 间距：8 px 基础单位 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --gutter: 22px;
+
+  /* 尺寸：品牌栏 48 / 搜索区 64 / 状态栏 44 */
+  --brandbar-h: 48px;
+  --searchfield-h: 64px;
+  --statusbar-h: 44px;
+
+  /* 动效：唤起 160–200ms，隐藏 100–140ms */
+  --dur-show: 180ms;
+  --dur-hide: 120ms;
+  --dur-hover: 130ms;
+  --dur-panel: 200ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.2, 0.9, 0.25, 1.04);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* 浅色主题不是简单反色：暖白背景、白面板、重新校准的阴影与玻璃 */
+  --bg: #f7f6f9;
+  --panel: #ffffff;
+  --floating: #eae8f1;
+  --border: #cfcbd9;
+  --border-soft: #e2dfea;
+  --accent: #5a58d6;
+  --accent-soft: #3a72cf;
+  --accent-alt: #7b5ce0;
+  --success: #1f8a6b;
+  --warning: #a8702a;
+  --danger: #c04a55;
+  --text: #1b1c29;
+  --text-secondary: #4c5068;
+  --text-subtle: #656a80;
+
+  --accent-06: rgb(90 88 214 / 6%);
+  --accent-10: rgb(90 88 214 / 9%);
+  --accent-16: rgb(90 88 214 / 14%);
+  --accent-28: rgb(90 88 214 / 24%);
+  --accent-55: rgb(90 88 214 / 45%);
+
+  --shadow-1: 0 1px 2px rgb(28 29 43 / 8%);
+  --shadow-2: 0 10px 26px rgb(28 29 43 / 10%);
+  --shadow-3: 0 24px 60px rgb(28 29 43 / 16%);
+  --ring: 0 0 0 3px var(--accent-16);
+
+  --glass-tint: rgb(247 246 249 / 88%);
+  --glass-panel: rgb(255 255 255 / 94%);
+  --glass-sheen: rgb(255 255 255 / 60%);
+  --glass-blur: 24px;
+  /* 浅色下让窗口底色更实：否则 Mica 的桌面壁纸会透上来，整窗发灰 */
+  --shell-tint: 92%;
+  --shell-glow: 4%;
+}
+
+/* 减少动效：动画退化为即时切换 */
+:root[data-motion="reduced"] {
+  --dur-show: 1ms;
+  --dur-hide: 1ms;
+  --dur-hover: 1ms;
+  --dur-panel: 1ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) {
+    --dur-show: 1ms;
+    --dur-hide: 1ms;
+    --dur-hover: 1ms;
+    --dur-panel: 1ms;
+  }
+}

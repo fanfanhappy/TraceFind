@@ -1,0 +1,11 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+.ui-profile/
+shots/*.log
+*.log
+_dsh_acl_recovery/
+
+# 发布产物（可重新生成）
+release/

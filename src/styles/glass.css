@@ -1,0 +1,72 @@
+/* ==========================================================================
+   AURA Search · Glass & Material
+   模块一 04｜毛玻璃与窗口材质
+
+   层级约定：
+   - .shell        窗口外框（透明窗口本体，负责圆角、描边、投影）
+   - .shell__glass 玻璃底色（原生 Mica/Acrylic 之上的一层薄色，保证可读性）
+   - .surface      实心内容面板（正文永远落在实色面板上）
+   backdrop-filter 只用于 WebView 内部的层次叠加，不作为跨应用桌面模糊的实现。
+   ========================================================================== */
+
+.shell {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  height: 100dvh;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-window);
+  background: var(--glass-tint);
+  box-shadow: inset 0 1px 0 var(--glass-sheen);
+}
+
+/* 原生材质已生效时：只用一层薄色保证文字对比度，绝不叠加 backdrop-filter。
+   透明窗口里的 backdrop-filter 没有可采样的背景，会把 Mica 压成黑底
+   （说明书 04 也明确要求跨应用模糊由系统材质提供）。 */
+:root[data-material="mica"] .shell,
+:root[data-material="acrylic"] .shell {
+  background: color-mix(in srgb, var(--bg) var(--shell-tint), transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Win10 或不支持原生材质：完全不透明降级，优先保证文字可读性 */
+:root[data-material="solid"] .shell {
+  background: var(--bg);
+}
+
+/* 顶部冷蓝紫的极轻量光晕，不做大面积高饱和渐变 */
+.shell::before {
+  position: absolute;
+  z-index: -1;
+  inset: -30% -10% auto -10%;
+  height: 70%;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at 30% 0%,
+    color-mix(in srgb, var(--accent) var(--shell-glow), transparent),
+    transparent 62%
+  );
+  content: "";
+  pointer-events: none;
+}
+
+.surface {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-panel);
+  background: var(--panel);
+}
+
+.surface--raised {
+  background: var(--floating);
+  box-shadow: var(--shadow-2);
+}
+
+/* 浮层（下拉、气泡、预览抽屉）：比面板更亮一档 */
+.overlay {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--floating);
+  box-shadow: var(--shadow-3);
+}
