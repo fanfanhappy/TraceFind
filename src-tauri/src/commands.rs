@@ -19,6 +19,50 @@ pub fn get_settings(state: State<'_, AppState>) -> AppSettings {
     settings::redacted(state.settings_snapshot())
 }
 
+#[tauri::command]
+pub fn suggested_roots<R: Runtime>(app: AppHandle<R>) -> Vec<String> {
+    scanner::default_roots(&app)
+}
+
+#[tauri::command]
+pub fn complete_onboarding<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    roots: Vec<String>,
+) -> Result<AppSettings, String> {
+    let mut validated: Vec<String> = Vec::new();
+    for path in roots {
+        let root = scanner::normalize_root(&path)
+            .filter(|root| root.is_absolute())
+            .ok_or_else(|| format!("目录不可用：{path}"))?;
+        let root = root.to_string_lossy().into_owned();
+        if !validated.iter().any(|existing| existing.eq_ignore_ascii_case(&root)) {
+            validated.push(root);
+        }
+    }
+    let current = {
+        let mut settings = state.settings.lock().unwrap_or_else(|err| err.into_inner());
+        if settings.onboarding_complete || !settings.roots.is_empty() {
+            return Ok(settings::redacted(settings.clone()));
+        }
+        let mut next = settings.clone();
+        next.roots = validated;
+        next.onboarding_complete = true;
+        next.content_index = false;
+        next.ocr_enabled = false;
+        settings::save(&app, &next)?;
+        *settings = next.clone();
+        next
+    };
+    if !current.roots.is_empty() {
+        restart_watcher(&app);
+        scanner::spawn_full(&app);
+    }
+    let current = settings::redacted(current);
+    let _ = app.emit("aura:settings-changed", current.clone());
+    Ok(current)
+}
+
 /// 用解析后的明暗重新应用原生材质（主窗口与设置窗口一起）。
 /// 前端把“跟随系统”解析成确定的深/浅后调用这里，保证材质与界面一致。
 #[tauri::command]

@@ -14,6 +14,7 @@ export type MaterialMode = 'mica' | 'acrylic' | 'solid'
 export type LauncherPhase = 'hidden' | 'showing' | 'visible' | 'hiding'
 
 export interface AppSettings {
+  onboardingComplete: boolean
   theme: ThemePreference
   reducedMotion: boolean
   hotkey: string
@@ -70,6 +71,7 @@ export interface RuntimeInfo {
 }
 
 export const defaultSettings: AppSettings = {
+  onboardingComplete: false,
   theme: 'dark',
   reducedMotion: false,
   hotkey: 'Alt+Space',
@@ -189,6 +191,16 @@ export async function loadSettings(): Promise<AppSettings> {
   } catch {
     return { ...defaultSettings }
   }
+}
+
+export async function suggestedRoots(): Promise<string[]> {
+  return isDesktop ? invoke<string[]>('suggested_roots') : []
+}
+
+export async function completeOnboarding(roots: string[]): Promise<AppSettings> {
+  return isDesktop
+    ? invoke<AppSettings>('complete_onboarding', { roots })
+    : patchSettings({ roots, onboardingComplete: true, contentIndex: false, ocrEnabled: false })
 }
 
 export async function patchSettings(patch: Partial<AppSettings>): Promise<AppSettings> {

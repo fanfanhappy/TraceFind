@@ -7,6 +7,7 @@ use tauri::{AppHandle, Manager, Runtime};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppSettings {
+    pub onboarding_complete: bool,
     pub theme: String,
     pub reduced_motion: bool,
     pub hotkey: String,
@@ -50,6 +51,7 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
+            onboarding_complete: false,
             theme: "dark".to_string(),
             reduced_motion: false,
             hotkey: "Alt+Space".to_string(),
@@ -224,7 +226,15 @@ pub fn config_path<R: Runtime>(app: &AppHandle<R>) -> PathBuf {
 pub fn load<R: Runtime>(app: &AppHandle<R>) -> AppSettings {
     let path = config_path(app);
     match fs::read_to_string(&path) {
-        Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
+        Ok(raw) => match serde_json::from_str::<AppSettings>(&raw) {
+            Ok(mut settings) => {
+                if !settings.roots.is_empty() {
+                    settings.onboarding_complete = true;
+                }
+                settings
+            }
+            Err(_) => AppSettings::default(),
+        },
         Err(_) => AppSettings::default(),
     }
 }

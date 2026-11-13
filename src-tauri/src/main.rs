@@ -97,15 +97,6 @@ fn main() {
             logging::init(&handle);
             aura_log!("TraceFind 启动");
 
-            let mut loaded = settings::load(&handle);
-            // 首次运行：默认扫描桌面/下载/文档
-            if loaded.roots.is_empty() {
-                loaded.roots = scanner::default_roots(&handle);
-                let _ = settings::save(&handle, &loaded);
-                aura_log!("初始化索引范围：{} 个目录", loaded.roots.len());
-            }
-
-            // 索引数据库放在应用数据目录；TRACEFIND_DATA_DIR / AURA_DATA_DIR 可覆盖，供隔离测试使用
             let data_dir = std::env::var("TRACEFIND_DATA_DIR")
                 .or_else(|_| std::env::var("AURA_DATA_DIR"))
                 .map(PathBuf::from)
@@ -123,6 +114,7 @@ fn main() {
                 migrate_legacy_data(&data_dir);
             }
             let _ = std::fs::create_dir_all(&data_dir);
+            let loaded = settings::load(&handle);
             let index_path = data_dir.join("index.db");
             let conn = match index::open(&index_path).and_then(|conn| {
                 index::init(&conn)?;
@@ -222,7 +214,7 @@ fn main() {
             let scan_index_path = index_path.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_millis(1200));
-                if scanner::is_running(&scan_handle) {
+                if scan_roots.is_empty() || scanner::is_running(&scan_handle) {
                     return;
                 }
 
@@ -267,6 +259,8 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
+            commands::suggested_roots,
+            commands::complete_onboarding,
             commands::patch_settings,
             commands::set_window_dark,
             commands::set_hold_visible,

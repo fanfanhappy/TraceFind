@@ -17,6 +17,10 @@ foreach ($dir in @($dataDir, $configDir, $webview)) {
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
 }
 
+if (-not (Test-Path (Join-Path $corpus '示例项目'))) {
+    & (Join-Path $PSScriptRoot 'make-demo-corpus.ps1') -Root $corpus
+}
+
 $settings = @{
     theme = 'dark'; reducedMotion = $false; hotkey = 'Ctrl+Alt+Shift+F11'
     autostart = $false; alwaysOnTop = $false; closeToTray = $true; resultLimit = 8
