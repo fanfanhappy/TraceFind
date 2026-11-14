@@ -1,4 +1,4 @@
-﻿//! 正文索引 worker。
+//! 正文索引 worker。
 //!
 //! 一个常驻低优先级线程：找出"还没有正文、或修改时间变了"的文件，抽取文字写进 FTS5。
 //! 每处理一个文件睡 25ms，避免和用户的实际操作抢磁盘；全量扫描期间让路。
@@ -149,16 +149,16 @@ fn run<R: Runtime>(app: AppHandle<R>) {
                 // 图片：本来就没有文本层，直接 OCR
                 if crate::ocr::supports_image(&ext) {
                     if !ocr_enabled {
-                        return base;
+                        return base.map(|text| (text, false));
                     }
                     // 小图标基本没有文字，OCR 只是白烧 CPU；超大图直接跳过
                     if size < 8 * 1024 {
-                        return Ok(String::new());
+                        return Ok((String::new(), false));
                     }
                     if size > 8 * 1024 * 1024 {
                         return Err("图片超过 8 MB，跳过 OCR".to_string());
                     }
-                    return crate::ocr::image_text(path_buf);
+                    return crate::ocr::image_text(path_buf).map(|text| (text, true));
                 }
 
                 // PDF：文本层太薄基本就是扫描件，OCR 兜底（上限 12 页）
@@ -169,20 +169,20 @@ fn run<R: Runtime>(app: AppHandle<R>) {
                         .unwrap_or(true);
                     if thin {
                         match crate::ocr::pdf_text(path_buf, crate::ocr::MAX_PDF_PAGES) {
-                            Ok(text) if text.trim().chars().count() > 40 => return Ok(text),
+                            Ok(text) if text.trim().chars().count() > 40 => return Ok((text, true)),
                             Ok(_) => {}
                             Err(err) => crate::aura_log!("PDF OCR 失败（{path}）：{err}"),
                         }
                     }
                 }
 
-                base
+                base.map(|text| (text, false))
             }));
 
             match extracted {
-                Ok(Ok(text)) => {
+                Ok(Ok((text, via_ocr))) => {
                     // 事务内核对版本：提取期间文件变了就不写，避免旧正文复活
-                    match index::commit_body(&mut conn, &path, mtime, size, &text) {
+                    match index::commit_body(&mut conn, &path, mtime, size, &text, via_ocr) {
                         Ok(index::BodyCommit::Stored) => {}
                         Ok(index::BodyCommit::Stale) => {
                             crate::aura_log!("正文已过期，丢弃：{path}");

@@ -6,9 +6,10 @@
 //! - 云端 Key 用 Windows DPAPI 加密后落盘，明文只存在于内存；
 //! - 查询向量与文档向量都做 L2 归一化，余弦相似度即点积。
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Duration;
 use std::time::Instant;
 
@@ -273,9 +274,50 @@ pub fn embed(settings: &AppSettings, texts: Vec<String>) -> Result<Vec<Vec<f32>>
 
 /* ------------------------------------------------------------------ 查询 */
 
+type SearchJob = Box<dyn FnOnce() + Send>;
+type PendingSearch = (u64, Instant, SearchJob);
+type SearchQueue = (Mutex<Option<PendingSearch>>, Condvar);
+
+pub fn schedule_search(generation: u64, job: impl FnOnce() + Send + 'static) {
+    static QUEUE: OnceLock<SearchQueue> = OnceLock::new();
+    static WORKER: std::sync::Once = std::sync::Once::new();
+    let queue = QUEUE.get_or_init(|| (Mutex::new(None), Condvar::new()));
+    WORKER.call_once(|| {
+        std::thread::spawn(move || run_search_worker(queue));
+    });
+    let (pending, wake) = queue;
+    let mut pending = pending.lock().unwrap_or_else(|err| err.into_inner());
+    if pending.as_ref().is_some_and(|(queued, _, _)| *queued > generation) {
+        return;
+    }
+    *pending = Some((generation, Instant::now() + Duration::from_millis(120), Box::new(job)));
+    wake.notify_one();
+}
+
+fn run_search_worker((pending, wake): &SearchQueue) {
+    let mut slot = pending.lock().unwrap_or_else(|err| err.into_inner());
+    loop {
+        let Some((_, deadline, _)) = slot.as_ref() else {
+            slot = wake.wait(slot).unwrap_or_else(|err| err.into_inner());
+            continue;
+        };
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if !remaining.is_zero() {
+            (slot, _) = wake.wait_timeout(slot, remaining).unwrap_or_else(|err| err.into_inner());
+            continue;
+        }
+        let (_, _, job) = slot.take().expect("pending search exists");
+        drop(slot);
+        job();
+        slot = pending.lock().unwrap_or_else(|err| err.into_inner());
+    }
+}
+
+pub struct VectorSnapshot(Vec<(String, String, Vec<f32>)>);
+
 struct VectorCache {
     loaded: Instant,
-    rows: Vec<(String, String, Vec<f32>)>,
+    snapshot: Arc<VectorSnapshot>,
 }
 
 static VECTORS_CHANGED: AtomicBool = AtomicBool::new(false);
@@ -285,38 +327,31 @@ fn cache_slot() -> &'static Mutex<Option<VectorCache>> {
     CACHE.get_or_init(|| Mutex::new(None))
 }
 
-fn load_cached(conn: &rusqlite::Connection) -> Result<(), String> {
-
-
-    {
-        let guard = cache_slot().lock().map_err(|_| "缓存锁失败".to_string())?;
-        if let Some(cache) = guard.as_ref() {
-            // 正在大批量重建：两秒内不重复整表重载，先用旧快照兜住查询
-            if !VECTORS_CHANGED.load(Ordering::Acquire)
-                || cache.loaded.elapsed() < Duration::from_secs(2)
-            {
-                return Ok(());
-            }
+pub fn vector_snapshot(conn: &rusqlite::Connection) -> Result<Arc<VectorSnapshot>, String> {
+    let mut guard = cache_slot().lock().map_err(|err| err.to_string())?;
+    if let Some(cache) = guard.as_ref() {
+        if !VECTORS_CHANGED.load(Ordering::Acquire)
+            || cache.loaded.elapsed() < Duration::from_secs(2)
+        {
+            return Ok(Arc::clone(&cache.snapshot));
         }
     }
 
     VECTORS_CHANGED.swap(false, Ordering::AcqRel);
-    let rows: Vec<(String, String, Vec<f32>)> = index::load_vectors(conn)
+    let rows = index::load_vectors(conn)
         .map_err(|err| {
             VECTORS_CHANGED.store(true, Ordering::Release);
-            format!("读取向量失败：{err}")
+            err.to_string()
         })?
         .into_iter()
-        .map(|(_id, path, text, vec)| (path, text, vec))
+        .map(|(_id, path, text, vector)| (path, text, vector))
         .collect();
-
-    if let Ok(mut guard) = cache_slot().lock() {
-        *guard = Some(VectorCache {
-            loaded: Instant::now(),
-            rows,
-        });
-    }
-    Ok(())
+    let snapshot = Arc::new(VectorSnapshot(rows));
+    *guard = Some(VectorCache {
+        loaded: Instant::now(),
+        snapshot: Arc::clone(&snapshot),
+    });
+    Ok(snapshot)
 }
 
 pub fn mark_vectors_changed() {
@@ -381,7 +416,7 @@ pub fn search_with_vector(
     limit: usize,
     scope: Option<&str>,
 ) -> Result<Vec<(String, String, f32)>, String> {
-    score_rows(conn, query_vector, limit, scope, MIN_SCORE)
+    Ok(vector_snapshot(conn)?.search(query_vector, limit, scope))
 }
 
 /// 诊断/探测用：不做阈值过滤
@@ -401,43 +436,59 @@ fn score_rows(
     scope: Option<&str>,
     threshold: f32,
 ) -> Result<Vec<(String, String, f32)>, String> {
-    load_cached(conn)?;
+    Ok(vector_snapshot(conn)?.score(query_vector, limit, scope, threshold))
+}
 
-    let guard = cache_slot().lock().map_err(|_| "缓存锁失败".to_string())?;
-    let Some(cache) = guard.as_ref() else {
-        return Ok(Vec::new());
-    };
-
-    let mut scored: Vec<(f32, &str, &str)> = cache
-        .rows
-        .iter()
-        .filter(|(path, _, _)| index::path_in_scope(path, scope))
-        .filter(|(_, _, vec)| vec.len() == query_vector.len())
-        .map(|(path, text, vec)| {
-            let dot: f32 = vec
-                .iter()
-                .zip(query_vector.iter())
-                .map(|(a, b)| a * b)
-                .sum();
-            (dot, path.as_str(), text.as_str())
-        })
-        .filter(|(score, _, _)| *score >= threshold)
-        .collect();
-
-    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-
-    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
-    let mut out = Vec::new();
-    for (score, path, text) in scored {
-        if !seen.insert(path) {
-            continue;
-        }
-        out.push((path.to_string(), text.to_string(), score));
-        if out.len() >= limit {
-            break;
-        }
+impl VectorSnapshot {
+    pub fn search(
+        &self,
+        query_vector: &[f32],
+        limit: usize,
+        scope: Option<&str>,
+    ) -> Vec<(String, String, f32)> {
+        self.score(query_vector, limit, scope, MIN_SCORE)
     }
-    Ok(out)
+
+    fn score(
+        &self,
+        query_vector: &[f32],
+        limit: usize,
+        scope: Option<&str>,
+        threshold: f32,
+    ) -> Vec<(String, String, f32)> {
+        if limit == 0 {
+            return Vec::new();
+        }
+
+        let mut best: HashMap<&str, (&str, f32)> = HashMap::new();
+        for (path, text, vector) in &self.0 {
+            if vector.len() != query_vector.len() || !index::path_in_scope(path, scope) {
+                continue;
+            }
+            let score: f32 = vector.iter().zip(query_vector).map(|(a, b)| a * b).sum();
+            if score >= threshold {
+                let hit = best.entry(path).or_insert((text, score));
+                if score > hit.1 {
+                    *hit = (text, score);
+                }
+            }
+        }
+
+        let mut hits: Vec<_> = best.into_iter().collect();
+        let compare = |(path_a, (_, score_a)): &(&str, (&str, f32)),
+                       (path_b, (_, score_b)): &(&str, (&str, f32))| {
+            score_b.partial_cmp(score_a).unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| path_a.cmp(path_b))
+        };
+        if hits.len() > limit {
+            hits.select_nth_unstable_by(limit, compare);
+            hits.truncate(limit);
+        }
+        hits.sort_unstable_by(compare);
+        hits.into_iter()
+            .map(|(path, (text, score))| (path.to_string(), text.to_string(), score))
+            .collect()
+    }
 }
 
 /// 一次性完成：算向量 + 打分（探测/单测用；搜索命令请先算向量再持锁）
@@ -604,4 +655,64 @@ pub fn spawn_worker<R: Runtime>(app: AppHandle<R>) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+
+    #[test]
+    fn semantic_queue_runs_only_the_latest_pending_job() {
+        use std::sync::mpsc;
+
+        let timeout = Duration::from_secs(5);
+        let (started, running) = mpsc::channel();
+        let (release, blocked) = mpsc::channel();
+        let (finished, results) = mpsc::channel();
+        schedule_search(1, move || {
+            started.send(()).unwrap();
+            let _ = blocked.recv_timeout(timeout);
+        });
+        running.recv_timeout(timeout).unwrap();
+
+        for generation in [2, 4, 3] {
+            let finished = finished.clone();
+            schedule_search(generation, move || {
+                finished.send(generation).unwrap();
+            });
+        }
+        drop(finished);
+        release.send(()).unwrap();
+
+        assert_eq!(results.recv_timeout(timeout), Ok(4));
+        assert_eq!(
+            results.recv_timeout(timeout),
+            Err(mpsc::RecvTimeoutError::Disconnected)
+        );
+    }
+
+    #[test]
+    fn semantic_top_k_keeps_the_best_chunk_per_file() {
+        let snapshot = VectorSnapshot(vec![
+            ("b".into(), "first".into(), vec![0.7]),
+            ("b".into(), "best".into(), vec![0.9]),
+            ("b".into(), "other".into(), vec![0.8]),
+            ("a".into(), "tied".into(), vec![0.9]),
+            ("c".into(), "below threshold".into(), vec![0.4]),
+            ("d".into(), "wrong dimension".into(), vec![1.0, 1.0]),
+        ]);
+
+        assert!(snapshot.search(&[1.0], 0, None).is_empty());
+        assert_eq!(
+            snapshot.search(&[1.0], 1, None),
+            vec![("a".into(), "tied".into(), 0.9)]
+        );
+        assert_eq!(
+            snapshot.search(&[1.0], 3, None),
+            vec![
+                ("a".into(), "tied".into(), 0.9),
+                ("b".into(), "best".into(), 0.9),
+            ]
+        );
+    }
 }

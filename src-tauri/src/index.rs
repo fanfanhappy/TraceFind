@@ -102,6 +102,26 @@ pub fn init(conn: &Connection) -> SqlResult<()> {
         "ALTER TABLE doc_text ADD COLUMN size INTEGER NOT NULL DEFAULT 0",
         [],
     );
+    let _ = conn.execute(
+        "ALTER TABLE doc_text ADD COLUMN via_ocr INTEGER NOT NULL DEFAULT 0",
+        [],
+    );
+    // 图片的正文只能是 OCR 出来的，老库直接标上；PDF 要等重新提取才知道
+    if meta_get(conn, "ocr_flag_version").as_deref() != Some("1") {
+        let list = crate::ocr::IMAGE_EXTS
+            .iter()
+            .map(|ext| format!("'{}'", ext))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let _ = conn.execute(
+            &format!(
+                "UPDATE doc_text SET via_ocr = 1 WHERE state = 'done' AND path IN \
+                 (SELECT path FROM files WHERE lower(ext) IN ({list}))"
+            ),
+            [],
+        );
+        let _ = meta_set(conn, "ocr_flag_version", "1");
+    }
 
     // 原文表是后加的：老库没有 body，清空状态让 worker 重抽一遍，
     // 否则片段会一直是空的。按 meta 版本只做一次。
@@ -748,6 +768,7 @@ pub fn commit_body(
     expect_mtime: i64,
     expect_size: i64,
     body: &str,
+    via_ocr: bool,
 ) -> SqlResult<BodyCommit> {
     let tx = conn.transaction()?;
 
@@ -787,12 +808,13 @@ pub fn commit_body(
             )?;
             tx.execute(
                 r#"
-                INSERT INTO doc_text(path, state, mtime, size, chars, error) VALUES(?1, 'done', ?2, ?3, ?4, NULL)
+                INSERT INTO doc_text(path, state, mtime, size, chars, error, via_ocr)
+                VALUES(?1, 'done', ?2, ?3, ?4, NULL, ?5)
                 ON CONFLICT(path) DO UPDATE SET
                     state = 'done', mtime = excluded.mtime, size = excluded.size,
-                    chars = excluded.chars, error = NULL
+                    chars = excluded.chars, error = NULL, via_ocr = excluded.via_ocr
                 "#,
-                params![path, expect_mtime, expect_size, chars],
+                params![path, expect_mtime, expect_size, chars, if via_ocr { 1 } else { 0 }],
             )?;
             BodyCommit::Stored
         }
@@ -1000,15 +1022,19 @@ pub fn content_hits(
 
     let head = format!(
         "SELECT f.path, f.name, f.name_lc, f.dir, f.ext, f.kind, f.size, f.mtime, f.depth, f.py, f.pyf, \
-         {snippet_expr} \
+         {snippet_expr}, COALESCE(dt.via_ocr, 0) \
          FROM doc_fts JOIN files f ON f.path = doc_fts.path \
          JOIN doc_body b ON b.path = doc_fts.path \
+         LEFT JOIN doc_text dt ON dt.path = doc_fts.path \
          WHERE doc_fts MATCH ?1"
     );
 
     let map_row = |row: &rusqlite::Row<'_>| -> SqlResult<FileHit> {
         let mut hit = row_to_hit(row)?;
         hit.snippet = row.get::<_, Option<String>>(11)?;
+        if row.get::<_, i64>(12).unwrap_or(0) == 1 {
+            hit.sources.push("ocr".to_string());
+        }
         Ok(hit)
     };
 
@@ -1369,6 +1395,27 @@ mod fts_tests {
         );
     }
 
+    #[test]
+    fn ocr_text_is_marked() {
+        let mut conn = memory();
+        seed(&mut conn, "C:\\Docs\\shot.png", "shot.png", "C:\\Docs");
+        commit_body(&mut conn, "C:\\Docs\\shot.png", 1_700_000_000, 10, "扫描件里的报价单", true).unwrap();
+
+        let hits = content_hits(&conn, "报价单", None, 5).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert!(
+            hits[0].sources.iter().any(|source| source == "ocr"),
+            "OCR 正文要带标记: {:?}",
+            hits[0].sources
+        );
+
+        // 普通正文不该被标成 OCR
+        seed(&mut conn, "C:\\Docs\\note.txt", "note.txt", "C:\\Docs");
+        commit_body(&mut conn, "C:\\Docs\\note.txt", 1_700_000_000, 10, "普通正文里的报价单", false).unwrap();
+        let plain = content_hits(&conn, "普通正文", None, 5).unwrap();
+        assert!(plain[0].sources.is_empty(), "普通正文不应带 ocr");
+    }
+
     fn seed(conn: &mut Connection, path: &str, name: &str, dir: &str) {
         let entry = NewEntry {
             path,
@@ -1457,13 +1504,13 @@ mod fts_tests {
         seed(&mut conn, "C:\\Docs\\a.txt", "a.txt", "C:\\Docs");
 
         // 提取期间文件被改了（大小不同）：正文必须丢弃
-        let stale = commit_body(&mut conn, "C:\\Docs\\a.txt", 1_700_000_000, 22, "过期正文").unwrap();
+        let stale = commit_body(&mut conn, "C:\\Docs\\a.txt", 1_700_000_000, 22, "过期正文", false).unwrap();
         assert_eq!(stale, BodyCommit::Stale);
         assert!(content_hits(&conn, "过期正文", None, 5).unwrap().is_empty());
         assert!(pending_docs(&conn, &["txt"], 1024, 10).unwrap().len() == 1, "应重新排队");
 
         // 版本一致：正常入库
-        let stored = commit_body(&mut conn, "C:\\Docs\\a.txt", 1_700_000_000, 10, "有效正文").unwrap();
+        let stored = commit_body(&mut conn, "C:\\Docs\\a.txt", 1_700_000_000, 10, "有效正文", false).unwrap();
         assert_eq!(stored, BodyCommit::Stored);
         assert_eq!(content_hits(&conn, "有效正文", None, 5).unwrap().len(), 1);
         assert!(pending_docs(&conn, &["txt"], 1024, 10).unwrap().is_empty());

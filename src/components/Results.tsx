@@ -44,6 +44,7 @@ function sourceTag(file: SearchHit): string | null {
   if (sources.includes('semantic')) return '语义'
   // 文件名已经对上了就不需要解释，只有"不是靠文件名"才标来源
   if (sources.includes('name')) return null
+  if (sources.includes('ocr')) return 'OCR'
   if (sources.includes('content')) return '正文'
   return null
 }

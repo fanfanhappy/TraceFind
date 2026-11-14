@@ -548,7 +548,11 @@ pub fn search_files(
     }
     for hit in content_hits {
         let snippet = hit.snippet.clone();
+        let via_ocr = hit.sources.iter().any(|source| source == "ocr");
         sources.entry(hit.path.clone()).or_default().push("content");
+        if via_ocr {
+            sources.entry(hit.path.clone()).or_default().push("ocr");
+        }
         match by_path.get_mut(&hit.path) {
             Some(existing) => {
                 if existing.snippet.is_none() {
@@ -569,10 +573,18 @@ pub fn search_files(
     merged.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
     let mut local_hits: Vec<FileHit> = merged.into_iter().map(|(_, hit)| hit).collect();
 
-    // 统一写入来源（顺序固定：name → content → semantic）
+    // 统一写入来源（顺序固定：name → content → ocr → semantic）
     for hit in local_hits.iter_mut() {
+        let keep_semantic: Vec<String> = hit
+            .sources
+            .iter()
+            .filter(|source| source.as_str() == "semantic")
+            .cloned()
+            .collect();
+        hit.sources.clear();
+        hit.sources.extend(keep_semantic);
         if let Some(list) = sources.get(&hit.path) {
-            for source in ["name", "content"] {
+            for source in ["name", "content", "ocr"] {
                 if list.contains(&source) {
                     hit.sources.push(source.to_string());
                 }
@@ -605,7 +617,7 @@ pub fn search_files(
         let local_paths: std::collections::HashSet<String> =
             local_hits.iter().map(|hit| hit.path.clone()).collect();
 
-        std::thread::spawn(move || {
+        crate::semantic::schedule_search(generation, move || {
             let state = app_handle.state::<AppState>();
             let is_current = || state.search_generation.load(Ordering::SeqCst) == generation;
             if !is_current() {
@@ -620,21 +632,18 @@ pub fn search_files(
                 return;
             }
 
-            let hits = {
-                let conn = state
-                    .db
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                crate::semantic::search_with_vector(
-                    &conn,
-                    &vector,
-                    limit.min(8),
-                    scope_for_task.as_deref(),
-                )
-                .unwrap_or_default()
+            let snapshot = {
+                let conn = state.db.lock().unwrap_or_else(|err| err.into_inner());
+                crate::semantic::vector_snapshot(&conn)
             };
-
-            if hits.is_empty() {
+            let Ok(snapshot) = snapshot else {
+                return;
+            };
+            if !is_current() {
+                return;
+            }
+            let hits = snapshot.search(&vector, limit.min(8), scope_for_task.as_deref());
+            if hits.is_empty() || !is_current() {
                 return;
             }
 
@@ -1081,20 +1090,19 @@ pub fn ask_files(
     };
 
     let mut chunks: Vec<(String, String)> = Vec::new();
-    {
-        let conn = state
-            .db
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-
-        if let Some(vector) = vector {
-            if let Ok(hits) =
-                crate::semantic::search_with_vector(&conn, &vector, top, scope.as_deref())
-            {
-                chunks.extend(hits.into_iter().map(|(path, text, _)| (path, text)));
-            }
+    if let Some(vector) = vector {
+        let snapshot = {
+            let conn = state.db.lock().unwrap_or_else(|err| err.into_inner());
+            crate::semantic::vector_snapshot(&conn)
+        };
+        if let Ok(snapshot) = snapshot {
+            let hits = snapshot.search(&vector, top, scope.as_deref());
+            chunks.extend(hits.into_iter().map(|(path, text, _)| (path, text)));
         }
+    }
 
+    {
+        let conn = state.db.lock().unwrap_or_else(|err| err.into_inner());
         if chunks.len() < top {
             if let Ok(hits) =
                 index::content_hits(&conn, &question, scope.as_deref(), top - chunks.len())
