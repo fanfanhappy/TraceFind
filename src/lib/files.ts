@@ -1,5 +1,5 @@
 // 搜索结果模型与展示工具。
-// 模块二起数据来自 Rust 侧的 SQLite 索引（见 src/lib/bridge.ts）；
+// 桌面端数据来自 Rust 侧的 SQLite 索引（见 src/lib/bridge.ts）；
 // 浏览器预览（pnpm dev:web）没有后端，退化为下面这组演示条目。
 
 export type FileKind =

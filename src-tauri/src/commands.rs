@@ -525,7 +525,7 @@ pub fn quit_app<R: Runtime>(app: AppHandle<R>) {
     quit(&app);
 }
 
-/// 模块一只做“交给系统默认程序打开”，真实文件动作在模块二接入索引后使用。
+/// 打开文件交给系统默认程序处理；路径来自索引结果，不做额外拼接。
 #[tauri::command]
 pub fn open_path(path: String) {
     let _ = std::process::Command::new("explorer").arg(path).spawn();

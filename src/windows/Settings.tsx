@@ -60,7 +60,6 @@ const SECTIONS: Array<{
   id: SectionId
   label: string
   icon: typeof Info
-  later?: boolean
 }> = [
   { id: 'general', label: '常规', icon: SlidersHorizontal },
   { id: 'hotkeys', label: '快捷键', icon: Keyboard },
@@ -269,7 +268,7 @@ export function Settings() {
       <div className="settings-body">
         <nav className="settings-nav" aria-label="设置分类">
           <span className="settings-nav__label">设置</span>
-          {SECTIONS.map(({ id, label, icon: Icon, later }) => (
+          {SECTIONS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
@@ -279,7 +278,6 @@ export function Settings() {
             >
               <Icon size={15} strokeWidth={1.75} />
               {label}
-              {later && <span className="navitem__later">后续</span>}
             </button>
           ))}
         </nav>
@@ -362,11 +360,6 @@ export function Settings() {
                     onChange={(value) => void patch({ resultLimit: Number(value) })}
                   />
                 </div>
-              </div>
-
-              <div className="note" data-kind="info">
-                <Info size={14} strokeWidth={1.75} />
-                <span>模块一只实现外壳与常驻体验；搜索、索引与 AI 能力按路线图在后续模块接入。</span>
               </div>
             </>
           )}
@@ -645,7 +638,7 @@ export function Settings() {
                 <div className="setting-row">
                   <span className="setting-row__desc">
                     支持 TXT / Markdown / 代码 / CSV、DOCX、PPTX、XLSX、可选中文本的 PDF。
-                    扫描件需要 OCR，会在后续模块提供；超过 16 MB 的文件跳过。
+                    图片与扫描版 PDF 可在「常规」里开启 OCR；超过 16 MB 的文件跳过。
                   </span>
                 </div>
               </div>
@@ -1104,9 +1097,6 @@ export function Settings() {
                 </div>
               </div>
 
-              <p style={{ marginBottom: 0 }}>
-                本版本为方向性设计实现：界面与交互已落地，搜索与索引能力待后续模块接入。
-              </p>
             </>
           )}
         </div>

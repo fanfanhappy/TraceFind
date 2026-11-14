@@ -1,6 +1,6 @@
-﻿//! 预览数据：给右侧抽屉提供"不打开外部程序也能看内容"的数据。
+//! 预览数据：给右侧抽屉提供"不打开外部程序也能看内容"的数据。
 //!
-//! 复用正文抽取器（模块四），所以 Office/PDF 不需要第二套解析；
+//! 复用正文抽取器，所以 Office/PDF 不需要第二套解析；
 //! 图片走 data URL，避免为预览单独开 asset 协议与额外权限。
 
 use std::collections::VecDeque;
@@ -250,7 +250,7 @@ pub fn build(path: &Path) -> PreviewPayload {
         }
     }
 
-    // 文档：复用模块四的抽取器
+    // 文档：复用正文抽取器
     let extracted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         extract::extract(path, &ext)
     }));
