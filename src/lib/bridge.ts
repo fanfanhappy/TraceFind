@@ -618,6 +618,11 @@ export async function rebuildSemantic(): Promise<boolean> {
   }
 }
 
+/** 从当前接口的 /models 拉取可用模型（需要已保存 Key） */
+export async function listModels(): Promise<string[]> {
+  return invoke<string[]>('list_models')
+}
+
 export async function testCloudEmbedding(payload: {
   baseUrl?: string
   model?: string

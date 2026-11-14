@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { ModelSelect } from '../components/ModelSelect'
+import { describeProvider, modelOptions } from '../lib/models'
 import {
   ArrowLeft,
   FolderSearch,
@@ -30,6 +32,7 @@ import {
   pauseIndex,
   patchSettings,
   restartOnboarding,
+  listModels,
   checkUpdate,
   installUpdate,
   onUpdateProgress,
@@ -84,6 +87,9 @@ export function Settings() {
   const [updateError, setUpdateError] = useState('')
   const [installing, setInstalling] = useState<{ phase: 'download' | 'install'; pct: number } | null>(null)
   const [installError, setInstallError] = useState('')
+  const [remoteModels, setRemoteModels] = useState<string[]>([])
+  const [loadingModels, setLoadingModels] = useState(false)
+  const [modelsError, setModelsError] = useState('')
 
   useEffect(
     () =>
@@ -93,6 +99,19 @@ export function Settings() {
       }),
     [],
   )
+
+  const fetchModels = useCallback(async () => {
+    setLoadingModels(true)
+    setModelsError('')
+    try {
+      const list = await listModels()
+      setRemoteModels(list)
+    } catch (err) {
+      setModelsError(String(err))
+    } finally {
+      setLoadingModels(false)
+    }
+  }, [])
 
   const runCheck = useCallback(async () => {
     setChecking(true)
@@ -790,16 +809,28 @@ export function Settings() {
                     </div>
                     <div className="setting-row">
                       <span className="setting-row__text">
-                        <span className="setting-row__title">模型名</span>
-                        <span className="setting-row__desc">例如 text-embedding-3-small</span>
+                        <span className="setting-row__title">嵌入模型</span>
+                        <span className="setting-row__desc">
+                          {describeProvider(settings.cloudBaseUrl)}
+                          {modelsError ? ` · ${modelsError}` : ' · 常用模型可直接选，也可以从接口拉取'}
+                        </span>
                       </span>
-                      <input
-                        className="textfield"
-                        style={{ width: 320 }}
-                        value={settings.cloudModel}
-                        placeholder="text-embedding-3-small"
-                        onChange={(event) => void patch({ cloudModel: event.target.value })}
-                      />
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <ModelSelect
+                          value={settings.cloudModel}
+                          options={modelOptions(settings.cloudBaseUrl, 'embedding', remoteModels, settings.cloudModel)}
+                          placeholder="text-embedding-3-small"
+                          onChange={(value) => void patch({ cloudModel: value })}
+                        />
+                        <button
+                          type="button"
+                          className="linkbtn"
+                          disabled={loadingModels}
+                          onClick={() => void fetchModels()}
+                        >
+                          {loadingModels ? '获取中…' : '从接口获取'}
+                        </button>
+                      </div>
                     </div>
                     <div className="setting-row">
                       <span className="setting-row__text">
@@ -967,15 +998,26 @@ export function Settings() {
                 <div className="setting-row">
                   <span className="setting-row__text">
                     <span className="setting-row__title">问答模型</span>
-                    <span className="setting-row__desc">例如 gpt-4o-mini；需与接口地址兼容</span>
+                    <span className="setting-row__desc">
+                      {describeProvider(settings.cloudBaseUrl)} · 需与接口地址兼容
+                    </span>
                   </span>
-                  <input
-                    className="textfield"
-                    style={{ width: 320 }}
-                    value={settings.assistantModel}
-                    placeholder="gpt-4o-mini"
-                    onChange={(event) => void patch({ assistantModel: event.target.value })}
-                  />
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <ModelSelect
+                      value={settings.assistantModel}
+                      options={modelOptions(settings.cloudBaseUrl, 'chat', remoteModels, settings.assistantModel)}
+                      placeholder="gpt-4o-mini"
+                      onChange={(value) => void patch({ assistantModel: value })}
+                    />
+                    <button
+                      type="button"
+                      className="linkbtn"
+                      disabled={loadingModels}
+                      onClick={() => void fetchModels()}
+                    >
+                      {loadingModels ? '获取中…' : '从接口获取'}
+                    </button>
+                  </div>
                 </div>
               </div>
 

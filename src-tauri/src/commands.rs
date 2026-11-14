@@ -1054,6 +1054,54 @@ pub fn cloud_key_status(state: State<'_, AppState>) -> bool {
     !state.settings_snapshot().cloud_key.is_empty()
 }
 
+/// 列出接口支持的模型（OpenAI 兼容的 /models），供设置页下拉选择
+#[tauri::command]
+pub fn list_models(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let settings = state.settings_snapshot();
+    if settings.cloud_base_url.trim().is_empty() {
+        return Err("请先填写接口地址".to_string());
+    }
+    if settings.cloud_key.is_empty() {
+        return Err("请先保存 API Key".to_string());
+    }
+    let key = crate::secrets::unprotect(&settings.cloud_key)?;
+    if key.is_empty() {
+        return Err("云端 API Key 未设置".to_string());
+    }
+    let endpoint = format!("{}/models", settings.cloud_base_url.trim_end_matches('/'));
+    let agent = ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_secs(15))
+        .build();
+    let response = agent
+        .get(&endpoint)
+        .set("Authorization", &format!("Bearer {key}"))
+        .set("User-Agent", "TraceFind")
+        .call()
+        .map_err(|err| format!("获取模型列表失败：{err}"))?;
+    let text = response
+        .into_string()
+        .map_err(|err| format!("读取响应失败：{err}"))?;
+    let json: serde_json::Value =
+        serde_json::from_str(&text).map_err(|err| format!("响应格式异常：{err}"))?;
+    let mut ids: Vec<String> = json
+        .get("data")
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.get("id").and_then(|id| id.as_str()))
+                .map(|id| id.to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    ids.sort();
+    ids.dedup();
+    if ids.is_empty() {
+        return Err("接口没有返回可用模型".to_string());
+    }
+    Ok(ids)
+}
+
 /// 用当前云端配置试算一次，确认地址/模型/Key 可用
 #[tauri::command]
 pub fn test_cloud_embedding(

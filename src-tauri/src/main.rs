@@ -251,6 +251,7 @@ fn main() {
         commands::restart_onboarding,
         commands::check_update,
         commands::install_update,
+        commands::list_models,
         commands::open_url,
             commands::patch_settings,
             commands::set_window_dark,
