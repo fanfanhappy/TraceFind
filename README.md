@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/fanfanhappy/TraceFind/releases/latest">下载 Windows 版</a> ·
-  <a href="docs/release-2.3.1.md">2.0.0 发布说明</a> ·
+  <a href="docs/release-2.4.0.md">2.0.0 发布说明</a> ·
   <a href="docs/DEVELOPMENT.md">开发指南</a> ·
   <a href="docs/DATA-AND-PRIVACY.md">数据与隐私</a>
 </p>
@@ -100,7 +100,7 @@
 
 ### 第一次使用
 
-先选一个自己熟悉的目录做验证。搜一个完整文件名，确认文件出现在结果中。接下来搜这份文件正文里的一个词，按 `Space` 打开预览。如果第二次搜不到，检查正文索引是否开启、该格式能否提取文字，以及后台是否还在处理文件。
+先选一个自己熟悉的目录做验证。搜一个完整文件名，确认文件出现在结果中。接下来搜这份文件正文里的一个词，按 `Ctrl + Space` 打开预览。如果第二次搜不到，检查正文索引是否开启、该格式能否提取文字，以及后台是否还在处理文件。
 
 ## 常用快捷键
 
@@ -108,7 +108,7 @@
 | --- | --- |
 | 唤起或隐藏 | 默认 `Alt + Space`。发生冲突时，查看状态栏或托盘显示的实际组合。 |
 | 选择与打开 | `↑` / `↓` 选择，`Enter` 打开 |
-| 快速预览 | `Space`（`Ctrl + Space` 同样有效；要输入空格用 `Shift + Space`） |
+| 快速预览 | 搜索框里 `Ctrl + Space`；焦点在结果列表时直接 `Space`，也可点行内预览按钮 |
 | 在资源管理器中定位 | `Ctrl + Enter` |
 | 问 AI（检索到的正文作答） | `Ctrl + Shift + Enter` |
 | 打开设置 | `Ctrl + ,` |
@@ -195,7 +195,7 @@ pnpm dev
 ## 项目文档
 
 - [开发、构建与打包](docs/DEVELOPMENT.md)
-- [TraceFind 2.0.0 发布说明](docs/release-2.3.1.md)
+- [TraceFind 2.0.0 发布说明](docs/release-2.4.0.md)
 - [贡献与截图规范](docs/contributing.md)
 - [发布流程与验收清单](docs/releasing.md)
 - [历史变更](docs/changelog-0.6.0.md)

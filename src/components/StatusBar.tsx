@@ -68,9 +68,7 @@ export function StatusBar({
               <CornerDownLeft size={11} strokeWidth={2.2} />
             </kbd>
             <span>打开</span>
-            <kbd aria-hidden>
-              <Space size={11} strokeWidth={2.2} />
-            </kbd>
+            <kbd aria-hidden>Ctrl+Space</kbd>
             <span>预览</span>
           </>
         )}

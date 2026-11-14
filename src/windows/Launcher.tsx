@@ -488,9 +488,8 @@ export function Launcher() {
       return
     }
 
-    // 空格：开/关预览。Shift+Space 才输入真正的空格（多词查询用得上），
-    // 中文输入法组合期间上面已提前返回，不会抢输入。
-    if (event.key === ' ' && !event.shiftKey && !event.metaKey && !event.altKey) {
+    // 空格：搜索框里正常输入；结果列表里按空格预览；Ctrl+Space 在哪儿都能预览
+    if (event.key === ' ' && (event.ctrlKey || target.id === 'results')) {
       if (event.repeat) return
       if (!previewOpen && !hits[activeIndex]) return
       event.preventDefault()

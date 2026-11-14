@@ -10,6 +10,7 @@ import {
   FileType2,
   FileVideo,
   Folder,
+  Eye,
   Presentation,
   type LucideIcon,
 } from 'lucide-react'
@@ -108,6 +109,19 @@ function Row({ file, index, active, hovered, query, onHover, onLeave, onSelect, 
       </span>
 
       <span className="result__meta">
+        <button
+          type="button"
+          className="result__preview"
+          title="预览（Space 或 Ctrl+Space）"
+          aria-label={`预览 ${file.name}`}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation()
+            onPreview(index)
+          }}
+        >
+          <Eye size={14} strokeWidth={1.8} />
+        </button>
         <span className="result__size">{file.kind === 'folder' ? '' : formatSize(file.size)}</span>
         <span className="result__time">{formatModified(file.modified)}</span>
       </span>
