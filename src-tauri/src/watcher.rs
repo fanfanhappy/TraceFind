@@ -40,7 +40,25 @@ pub fn is_active() -> bool {
         .unwrap_or(false)
 }
 
-pub fn start<R: Runtime>(app: &AppHandle<R>, roots: Vec<PathBuf>, excludes: Vec<PathBuf>) {
+pub fn refresh<R: Runtime>(app: &AppHandle<R>) {
+    static REGISTERING: Mutex<()> = Mutex::new(());
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let _registration = REGISTERING.lock().unwrap_or_else(|err| err.into_inner());
+        let state = app.state::<AppState>();
+        if state.quitting.load(Ordering::Relaxed) {
+            return;
+        }
+        let settings = state.settings_snapshot();
+        start(
+            &app,
+            settings.roots.into_iter().map(PathBuf::from).collect(),
+            settings.excluded_paths.into_iter().map(PathBuf::from).collect(),
+        );
+    });
+}
+
+fn start<R: Runtime>(app: &AppHandle<R>, roots: Vec<PathBuf>, excludes: Vec<PathBuf>) {
     stop();
 
     let (tx, rx) = channel();
@@ -74,6 +92,9 @@ pub fn start<R: Runtime>(app: &AppHandle<R>, roots: Vec<PathBuf>, excludes: Vec<
     std::thread::spawn(move || worker(handle, rx, roots_for_worker, excludes));
 
     if let Ok(mut guard) = slot().lock() {
+        if app.state::<AppState>().quitting.load(Ordering::Relaxed) {
+            return;
+        }
         *guard = Some(watcher);
     }
     crate::aura_log!("文件监听已启动：{watched} 个目录，防抖 {DEBOUNCE_MS}ms");

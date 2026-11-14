@@ -183,8 +183,10 @@ export function Launcher() {
 
   /* ---------------------------------------------------- 查询（防抖 + 竞态保护） */
 
+  const onboardingOpen = isDesktop && ready && !settings.onboardingComplete
+
   useEffect(() => {
-    if (!ready) return
+    if (!ready || onboardingOpen) return
     let alive = true
     const trimmed = query.trim()
     const requestId = ++searchRequest.current
@@ -224,7 +226,7 @@ export function Launcher() {
       searchRequest.current++
       window.clearTimeout(timer)
     }
-  }, [query, scope, settings.resultLimit, settings.typeFilter, settings.sortMode, settings.semanticEnabled, settings.semanticProvider, settings.cloudBaseUrl, settings.cloudModel, ready, index.lastScan, revision])
+  }, [query, scope, settings.resultLimit, settings.typeFilter, settings.sortMode, settings.semanticEnabled, settings.semanticProvider, settings.cloudBaseUrl, settings.cloudModel, ready, onboardingOpen, index.lastScan, revision])
 
   /* ---------------------------------------------------- 生命周期：事件驱动 */
 
@@ -271,7 +273,7 @@ export function Launcher() {
 
   // 启动时检查更新：默认 24 小时一次，可在设置里关掉
   useEffect(() => {
-    if (!isDesktop || !ready || !settings.checkUpdates) return
+    if (!isDesktop || !ready || onboardingOpen || !settings.checkUpdates) return
     const now = Math.floor(Date.now() / 1000)
     if (now - settings.lastUpdateCheck < 86400) return
     let alive = true
@@ -285,7 +287,7 @@ export function Launcher() {
     return () => {
       alive = false
     }
-  }, [ready, settings.checkUpdates, settings.lastUpdateCheck, settings.skippedVersion])
+  }, [ready, onboardingOpen, settings.checkUpdates, settings.lastUpdateCheck, settings.skippedVersion])
 
   function mergeSemanticHits(extra: SearchHit[]) {
     const current = hitsRef.current
@@ -433,8 +435,6 @@ export function Launcher() {
     setPreviewOpen(false)
     inputRef.current?.blur()
   }
-
-  const onboardingOpen = isDesktop && ready && !settings.onboardingComplete
 
   function onKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
     if (onboardingOpen) return

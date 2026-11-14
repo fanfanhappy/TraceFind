@@ -20,87 +20,102 @@ pub fn get_settings(state: State<'_, AppState>) -> AppSettings {
 }
 
 #[tauri::command]
-pub fn suggested_roots<R: Runtime>(app: AppHandle<R>) -> Vec<String> {
-    scanner::default_roots(&app)
+pub async fn suggested_roots<R: Runtime>(app: AppHandle<R>) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || scanner::default_roots(&app))
+        .await
+        .map_err(|err| err.to_string())
 }
 
 #[tauri::command]
-pub fn complete_onboarding<R: Runtime>(
+pub async fn complete_onboarding<R: Runtime>(
     app: AppHandle<R>,
-    state: State<'_, AppState>,
     roots: Vec<String>,
 ) -> Result<AppSettings, String> {
-    let (current, dropped_roots, roots_changed) = {
-        let mut settings = state.settings.lock().unwrap_or_else(|err| err.into_inner());
-        let mut next = settings.clone();
-        if !roots.is_empty() {
-            let mut validated = Vec::<String>::new();
-            for path in roots {
-                let root = if let Some(existing) = settings.roots.iter()
-                    .find(|existing| existing.eq_ignore_ascii_case(&path))
-                {
-                    // Preserve existing roots even while a drive is disconnected.
-                    existing.clone()
-                } else {
-                    scanner::normalize_root(&path)
-                        .filter(|root| root.is_absolute())
-                        .ok_or_else(|| format!("目录不可用：{path}"))?
-                        .to_string_lossy()
-                        .into_owned()
-                };
-                if !validated.iter().any(|existing| existing.eq_ignore_ascii_case(&root)) {
-                    validated.push(root);
-                }
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let configured_roots = state.settings_snapshot().roots;
+        let mut validated = Vec::<String>::new();
+        for path in roots {
+            let root = if let Some(existing) = configured_roots.iter()
+                .find(|existing| existing.eq_ignore_ascii_case(&path))
+            {
+                // Preserve existing roots even while a drive is disconnected.
+                existing.clone()
+            } else {
+                scanner::normalize_root(&path)
+                    .filter(|root| root.is_absolute())
+                    .ok_or_else(|| format!("目录不可用：{path}"))?
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            if !validated.iter().any(|existing| existing.eq_ignore_ascii_case(&root)) {
+                validated.push(root);
             }
-            next.roots = validated;
         }
-        next.onboarding_complete = true;
-        if !settings.onboarding_complete && settings.roots.is_empty() {
-            next.content_index = false;
-            next.ocr_enabled = false;
+        let (current, dropped_roots, roots_changed) = {
+            let mut settings = state.settings.lock().unwrap_or_else(|err| err.into_inner());
+            let mut next = settings.clone();
+            if !validated.is_empty() {
+                next.roots = validated;
+            }
+            next.onboarding_complete = true;
+            if !settings.onboarding_complete && settings.roots.is_empty() {
+                next.content_index = false;
+                next.ocr_enabled = false;
+            }
+            let dropped_roots: Vec<_> = settings.roots.iter()
+                .filter(|root| !next.roots.iter().any(|path| path.eq_ignore_ascii_case(root)))
+                .cloned()
+                .collect();
+            let roots_changed = next.roots != settings.roots;
+            settings::save(&app, &next)?;
+            *settings = next.clone();
+            (next, dropped_roots, roots_changed)
+        };
+        if roots_changed {
+            bump_config_version(&app);
+            purge_paths(&app, &dropped_roots);
+            restart_watcher(&app);
+            if !scanner::is_running(&app) {
+                scanner::spawn_full(&app);
+            }
         }
-        let dropped_roots: Vec<_> = settings.roots.iter()
-            .filter(|root| !next.roots.iter().any(|path| path.eq_ignore_ascii_case(root)))
-            .cloned()
-            .collect();
-        let roots_changed = next.roots != settings.roots;
-        settings::save(&app, &next)?;
-        *settings = next.clone();
-        (next, dropped_roots, roots_changed)
-    };
-    if roots_changed {
-        bump_config_version(&app);
-        purge_paths(&app, &dropped_roots);
-        restart_watcher(&app);
-        if !scanner::is_running(&app) {
-            scanner::spawn_full(&app);
-        }
-    }
-    let current = settings::redacted(current);
-    let _ = app.emit("aura:settings-changed", current.clone());
-    Ok(current)
+        let current = settings::redacted(current);
+        let _ = app.emit("aura:settings-changed", current.clone());
+        Ok(current)
+    })
+    .await
+    .map_err(|err| err.to_string())?
 }
 
 /// 检查新版本：只发一个 GET 到 GitHub 的公开接口，不上传任何本地信息。
 #[tauri::command]
-pub fn check_update<R: Runtime>(
+pub async fn check_update<R: Runtime>(
     app: AppHandle<R>,
-    state: State<'_, AppState>,
     record: Option<bool>,
 ) -> crate::update::UpdateStatus {
-    let current = env!("CARGO_PKG_VERSION");
-    let status = crate::update::check(current);
+    tauri::async_runtime::spawn_blocking(move || {
+        let current = env!("CARGO_PKG_VERSION");
+        let status = crate::update::check(current);
 
-    // 只有真的问到远端才记录时间，离线时下次启动还会再试
-    if status.checked && record.unwrap_or(true) {
-        let mut settings = state.settings.lock().unwrap_or_else(|err| err.into_inner());
-        settings.last_update_check = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
-        let _ = settings::save(&app, &settings);
-    }
-    status
+        // 只有真的问到远端才记录时间，离线时下次启动还会再试
+        if status.checked && record.unwrap_or(true) {
+            let state = app.state::<AppState>();
+            let mut settings = state.settings.lock().unwrap_or_else(|err| err.into_inner());
+            settings.last_update_check = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            let _ = settings::save(&app, &settings);
+        }
+        status
+    })
+    .await
+    .unwrap_or_else(|err| crate::update::UpdateStatus {
+        current: env!("CARGO_PKG_VERSION").to_string(),
+        error: Some(err.to_string()),
+        ..Default::default()
+    })
 }
 
 /// 打开链接（只允许本项目的 GitHub 页面，避免被当成通用启动器）
@@ -505,17 +520,12 @@ fn purge_paths<R: Runtime>(app: &AppHandle<R>, paths: &[String]) -> usize {
 
 /// 扫描范围或排除项变化后重启监听（watcher 绑定的是目录句柄）
 fn restart_watcher<R: Runtime>(app: &AppHandle<R>) {
-    let settings = app.state::<AppState>().settings_snapshot();
-    crate::watcher::start(
-        app,
-        settings.roots.iter().map(PathBuf::from).collect(),
-        settings.excluded_paths.iter().map(PathBuf::from).collect(),
-    );
+    crate::watcher::refresh(app);
 }
 
 pub fn quit<R: Runtime>(app: &AppHandle<R>) {
-    crate::watcher::stop();
     app.state::<AppState>().quitting.store(true, Ordering::Relaxed);
+    crate::watcher::stop();
     hotkey_manager::unregister_all(app);
     app.exit(0);
 }

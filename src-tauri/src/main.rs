@@ -202,20 +202,13 @@ fn main() {
             semantic::spawn_worker(handle.clone());
 
             // 实时更新：监听扫描范围内的变化
-            watcher::start(
-                &handle,
-                loaded.roots.iter().map(PathBuf::from).collect(),
-                loaded.excluded_paths.iter().map(PathBuf::from).collect(),
-            );
+            watcher::refresh(&handle);
 
             // 索引：空库立刻扫；非空时 10 分钟内扫过就跳过（全量扫描只要 0.5s，\n            // 顺手清掉监听可能漏掉的删除/移动，代价可以接受）
             let scan_handle = handle.clone();
-            let scan_roots = loaded.roots.clone();
-            let scan_excludes = loaded.excluded_paths.clone();
-            let scan_index_path = index_path.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_millis(1200));
-                if scan_roots.is_empty() || scanner::is_running(&scan_handle) {
+                if scan_handle.state::<state::AppState>().settings_snapshot().roots.is_empty() || scanner::is_running(&scan_handle) {
                     return;
                 }
 
@@ -236,14 +229,7 @@ fn main() {
                 }
 
                 aura_log!("开始后台索引扫描（上次：{last_scan}）");
-                scanner::spawn(
-                    scan_handle.clone(),
-                    scanner::ScanOptions {
-                        roots: scan_roots.iter().map(PathBuf::from).collect(),
-                        excludes: scan_excludes.iter().map(PathBuf::from).collect(),
-                        index_path: scan_index_path,
-                    },
-                );
+                scanner::spawn_full(&scan_handle);
             });
 
             // 兜底：前端脚本异常时不能让应用“隐身”，1.6s 后强制显示窗口
