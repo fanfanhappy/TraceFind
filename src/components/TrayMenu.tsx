@@ -13,6 +13,7 @@ import {
 import {
   checkUpdate,
   getIndexStatus,
+  getRuntimeInfo,
   hideTrayMenu,
   loadSettings,
   openSettingsWindow,
@@ -32,10 +33,14 @@ export function TrayMenu() {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [index, setIndex] = useState<IndexStatus | null>(null)
   const [update, setUpdate] = useState<UpdateStatus | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [hotkey, setHotkey] = useState('')
 
   const refresh = useCallback(() => {
     void loadSettings().then(setSettings)
     void getIndexStatus().then(setIndex)
+    // 快捷键可能被占用而降级，面板要显示实际生效的那个
+    void getRuntimeInfo().then((info) => setHotkey(info.hotkey || ''))
   }, [])
 
   useEffect(() => {
@@ -71,7 +76,7 @@ export function TrayMenu() {
   const files = index?.state === 'ready' ? index.files : index?.scanned ?? 0
   const scanning = index?.state === 'scanning'
   const paused = index?.state === 'paused'
-  const hotkey = settings?.hotkey ?? ''
+
 
   return (
     <div className="tray" role="menu" aria-label="TraceFind 托盘菜单">
@@ -111,18 +116,30 @@ export function TrayMenu() {
         type="button"
         className="tray__item"
         role="menuitem"
-        onClick={() =>
-          run(async () => {
+        disabled={checking}
+        onClick={async () => {
+          setChecking(true)
+          try {
             const status = await checkUpdate(false)
             setUpdate(status)
-            if (status.checked && status.available) await openUrl(status.url)
-          })
-        }
+            if (status.checked && status.available) void openUrl(status.url)
+          } finally {
+            setChecking(false)
+          }
+        }}
       >
         <Download size={15} strokeWidth={1.8} />
         <span>检查更新</span>
-        <span className="tray__hint">
-          {update?.checked ? (update.available ? `发现 ${update.latest}` : '已最新') : '—'}
+        <span className="tray__hint" title={update?.error ?? undefined}>
+          {checking
+            ? '检查中…'
+            : update?.checked
+              ? update.available
+                ? `发现 ${update.latest}`
+                : '已最新'
+              : update?.error
+                ? '检查失败'
+                : '—'}
         </span>
       </button>
 
@@ -132,7 +149,7 @@ export function TrayMenu() {
         type="button"
         className="tray__item"
         role="menuitem"
-        onClick={() => run(async () => setSettings(await toggleAutostart()))}
+        onClick={async () => setSettings(await toggleAutostart())}
       >
         <Zap size={15} strokeWidth={1.8} />
         <span>开机启动</span>
