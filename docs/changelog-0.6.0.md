@@ -73,7 +73,7 @@
 | 扫描收尾 | 全量扫描结束后执行 PRAGMA optimize 与 wal_checkpoint(TRUNCATE)，避免 WAL 无限增长 |
 | 语义批处理 | 嵌入批大小 16 → 32，空闲轮询 2.5s → 1.5s |
 
-发布说明见 **docs/release-1.0.0.md**。
+发布说明见当前 [2.0.0 说明](release-2.0.0.md)，迁移见 [migrating.md](migrating.md)。
 
 # 0.12.0：预览、AI 问答、OCR 调度
 

@@ -25,4 +25,4 @@
 | 索引 | `%APPDATA%\com.tracefind.desktop\index.db` |
 | 模型缓存 | `%APPDATA%\com.tracefind.desktop\models\` |
 
-从 TraceFind 迁移的条件见 [1.1.0 发布说明](release-1.1.0.md)。
+从 TraceFind 迁移的条件见 [迁移说明](migrating.md)。
