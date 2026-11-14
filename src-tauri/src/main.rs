@@ -273,6 +273,8 @@ fn main() {
             commands::ocr_probe,
             commands::ask_files,
             commands::test_cloud_embedding,
+        commands::apply_embedding,
+        commands::apply_chat,
             commands::cloud_key_status,
             commands::start_index,
             commands::pause_index,

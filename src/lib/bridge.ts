@@ -666,9 +666,35 @@ export async function rebuildSemantic(): Promise<boolean> {
   }
 }
 
-/** 从当前接口的 /models 拉取可用模型（需要已保存 Key） */
-export async function listModels(): Promise<string[]> {
-  return invoke<string[]>('list_models')
+/** 从接口的 /models 拉取可用模型；可以直接用设置页里的草稿地址与 Key */
+export async function listModels(payload: { baseUrl?: string; apiKey?: string } = {}): Promise<string[]> {
+  if (!isDesktop) return []
+  return invoke<string[]>('list_models', {
+    baseUrl: payload.baseUrl,
+    apiKey: payload.apiKey,
+  })
+}
+
+/** 验证并启用语义检索：验证失败不会保存，也不会动现有索引 */
+export async function applyEmbedding(payload: {
+  provider: 'local' | 'cloud'
+  baseUrl: string
+  model: string
+  apiKey?: string
+  consent: boolean
+}): Promise<{ settings: AppSettings; rebuilt: boolean; provider: string }> {
+  if (!isDesktop) throw new Error('仅桌面端可用')
+  return invoke('apply_embedding', { ...payload })
+}
+
+/** 验证并启用 AI 文件问答（与语义检索分开验证） */
+export async function applyChat(payload: {
+  baseUrl: string
+  model: string
+  apiKey?: string
+}): Promise<{ settings: AppSettings; ms: number; model: string }> {
+  if (!isDesktop) throw new Error('仅桌面端可用')
+  return invoke('apply_chat', { ...payload })
 }
 
 export async function testCloudEmbedding(payload: {

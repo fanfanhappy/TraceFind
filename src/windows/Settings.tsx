@@ -47,8 +47,8 @@ import {
   startDrag,
   cloudKeyStatus,
   onSemanticStatus,
-  setSemantic,
-  testCloudEmbedding,
+  applyEmbedding,
+  applyChat,
   startIndex,
   type AppSettings,
   type ContentStatus,
@@ -100,14 +100,14 @@ export function Settings() {
     [],
   )
 
-  const fetchModels = useCallback(async () => {
+  const fetchModels = useCallback(async (baseUrl: string, apiKey?: string) => {
     setLoadingModels(true)
     setModelsError('')
     try {
-      const list = await listModels()
+      const list = await listModels({ baseUrl: baseUrl.trim() || undefined, apiKey })
       setRemoteModels(list)
     } catch (err) {
-      setModelsError(String(err))
+      setModelsError(String(err).replace(/^Error:\s*/, ''))
     } finally {
       setLoadingModels(false)
     }
@@ -152,13 +152,17 @@ export function Settings() {
   })
   const [cloudKeySaved, setCloudKeySaved] = useState(false)
   const [cloudKeyDraft, setCloudKeyDraft] = useState('')
-  const [cloudTest, setCloudTest] = useState<{
-    ok: boolean
-    error?: string
-    model?: string
-    dim?: number
-    ms?: number
-  } | null>(null)
+  // AI 页草稿：先配置、验证通过才落盘
+  const [aiProvider, setAiProvider] = useState<'local' | 'cloud'>('local')
+  const [aiBaseUrl, setAiBaseUrl] = useState('')
+  const [aiModel, setAiModel] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiError, setAiError] = useState('')
+  const [aiHint, setAiHint] = useState('')
+  const [chatModelDraft, setChatModelDraft] = useState('')
+  const [chatBusy, setChatBusy] = useState(false)
+  const [chatError, setChatError] = useState('')
+  const [chatOk, setChatOk] = useState('')
   const [rootDraft, setRootDraft] = useState('')
   const [excludeDraft, setExcludeDraft] = useState('')
   const [rootError, setRootError] = useState('')
@@ -282,6 +286,126 @@ export function Settings() {
     return () => window.removeEventListener('keydown', onKeyDown)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /* ---------------------------------------------------------- AI 草稿 */
+
+  // 设置加载或保存后，把草稿同步成已生效的配置（用户正在输入时不会被覆盖）
+  useEffect(() => {
+    setAiProvider(settings.semanticProvider === 'cloud' ? 'cloud' : 'local')
+    setAiBaseUrl(settings.cloudBaseUrl)
+    setAiModel(settings.cloudModel)
+    setChatModelDraft(settings.assistantModel)
+  }, [
+    settings.semanticProvider,
+    settings.cloudBaseUrl,
+    settings.cloudModel,
+    settings.assistantModel,
+  ])
+
+  const aiKeyReady = cloudKeySaved || cloudKeyDraft.trim().length > 0
+
+  const semanticConfigured =
+    aiProvider === 'local'
+      ? true
+      : Boolean(aiBaseUrl.trim() && aiModel.trim() && aiKeyReady)
+
+  const semanticTone =
+    semantic.state === 'error'
+      ? 'error'
+      : settings.semanticEnabled && semantic.state === 'ready' && semantic.vectors > 0
+        ? 'ready'
+        : settings.semanticEnabled
+          ? 'busy'
+          : semanticConfigured
+            ? 'idle'
+            : 'off'
+
+  const semanticLabel =
+    semantic.state === 'error'
+      ? '出错'
+      : !settings.semanticEnabled
+        ? semanticConfigured
+          ? '可启用'
+          : '未配置'
+        : semantic.state === 'downloading'
+          ? '正在下载模型'
+          : semantic.state === 'ready' && semantic.vectors > 0
+            ? '可搜索'
+            : '正在建立索引'
+
+  const semanticDetail =
+    semantic.state === 'error'
+      ? `出错：${semantic.message ?? '未知原因'}`
+      : !settings.semanticEnabled
+        ? semanticConfigured
+          ? aiProvider === 'cloud'
+            ? '配置已齐全，点「验证并启用」试算通过后开始建立向量。'
+            : '本地模型就绪后在后台建立向量，不联网。'
+          : aiProvider === 'cloud'
+            ? '还差接口地址、API Key 或嵌入模型。'
+            : '未启用'
+        : semantic.state === 'ready' && semantic.vectors > 0
+          ? `${semantic.chunks.toLocaleString('zh-CN')} 块 / ${semantic.vectors.toLocaleString('zh-CN')} 向量 · ${semantic.model || (aiProvider === 'cloud' ? aiModel : 'bge-small-zh-v1.5')}`
+          : semantic.state === 'downloading'
+            ? '正在下载本地模型，完成后自动开始建立向量。'
+            : `已启用 · ${semantic.model || (aiProvider === 'cloud' ? aiModel : 'bge-small-zh-v1.5')} · 等待或正在建立索引`;
+
+  const chatConfigured = Boolean((aiBaseUrl || settings.cloudBaseUrl).trim() && chatModelDraft.trim() && aiKeyReady)
+  const chatTone = settings.assistantEnabled && chatConfigured ? 'ready' : chatConfigured ? 'idle' : 'off'
+  const chatLabel = settings.assistantEnabled && chatConfigured ? '可用' : chatConfigured ? '可启用' : '未配置'
+  async function enableSemantic() {
+    setAiBusy(true)
+    setAiError('')
+    setAiHint('')
+    try {
+      const result = await applyEmbedding({
+        provider: aiProvider,
+        baseUrl: aiProvider === 'cloud' ? aiBaseUrl : '',
+        model: aiProvider === 'cloud' ? aiModel : '',
+        apiKey: aiProvider === 'cloud' ? cloudKeyDraft || undefined : undefined,
+        consent: aiProvider === 'cloud',
+      })
+      setSettings(result.settings)
+      setCloudKeyDraft('')
+      setCloudKeySaved(await cloudKeyStatus())
+      setSemanticState(await getSemanticStatus())
+      setAiHint(
+        result.rebuilt
+          ? aiProvider === 'cloud'
+            ? '验证通过，配置已保存；嵌入模型有变化，旧向量已清空，正在重建。'
+            : '已启用本地模型，正在建立向量。'
+          : aiProvider === 'cloud'
+            ? '验证通过，配置已保存并启用。'
+            : '已启用本地模型。',
+      )
+    } catch (err) {
+      // 失败时保留输入与当前生效配置，只在页面给出原因
+      setAiError(String(err).replace(/^Error:\s*/, ''))
+    } finally {
+      setAiBusy(false)
+    }
+  }
+
+  async function enableChat() {
+    setChatBusy(true)
+    setChatError('')
+    setChatOk('')
+    try {
+      const result = await applyChat({
+        baseUrl: (aiBaseUrl || settings.cloudBaseUrl).trim(),
+        model: chatModelDraft.trim(),
+        apiKey: cloudKeyDraft || undefined,
+      })
+      setSettings(result.settings)
+      setCloudKeyDraft('')
+      setCloudKeySaved(await cloudKeyStatus())
+      setChatOk(`验证通过 · ${result.model} · ${result.ms}ms，已启用`)
+    } catch (err) {
+      setChatError(String(err).replace(/^Error:\s*/, ''))
+    } finally {
+      setChatBusy(false)
+    }
+  }
 
   return (
     <div className="shell settings-app" data-material-ready={loaded}>
@@ -779,174 +903,178 @@ export function Settings() {
           {section === 'ai' && (
             <>
               <h2>AI 与模型</h2>
-              <p>语义检索可以用本地模型（完全离线），也可以接云端接口；切换提供方会重建向量。</p>
+              <p>先选用途，再填配置，最后验证并启用——只有验证通过才会保存并生效。</p>
+
               <div className="setting-group">
                 <div className="setting-row">
                   <span className="setting-row__text">
-                    <span className="setting-row__title">语义提供方</span>
-                    <span className="setting-row__desc">
-                      本地模型完全离线；云端接口配置更省心，但查询文本会发送到所填地址。
+                    <span className="setting-row__title">
+                      语义检索
+                      <span className={`ai-status ai-status--${semanticTone}`}>{semanticLabel}</span>
                     </span>
+                    <span className="setting-row__desc">{semanticDetail}</span>
                   </span>
                   <div className="segmented">
                     <button
                       type="button"
-                      aria-pressed={settings.semanticProvider === 'local'}
-                      onClick={() => void patch({ semanticProvider: 'local' })}
+                      aria-pressed={aiProvider === 'local'}
+                      onClick={() => {
+                        setAiProvider('local')
+                        setAiError('')
+                        setAiHint('')
+                      }}
                     >
                       本地模型
                     </button>
                     <button
                       type="button"
-                      aria-pressed={settings.semanticProvider === 'cloud'}
-                      onClick={() => void patch({ semanticProvider: 'cloud' })}
+                      aria-pressed={aiProvider === 'cloud'}
+                      onClick={() => {
+                        setAiProvider('cloud')
+                        setAiError('')
+                        setAiHint('')
+                      }}
                     >
                       云端接口
                     </button>
                   </div>
                 </div>
 
-                {settings.semanticProvider === 'cloud' && (
+                {aiProvider === 'cloud' ? (
                   <>
                     <div className="setting-row">
                       <span className="setting-row__text">
                         <span className="setting-row__title">接口地址</span>
-                        <span className="setting-row__desc">OpenAI 兼容的 /embeddings 端点</span>
+                        <span className="setting-row__desc">OpenAI 兼容的 /embeddings 与 /models 端点</span>
                       </span>
                       <input
                         className="textfield"
-                        style={{ width: 320 }}
-                        value={settings.cloudBaseUrl}
+                        style={{ width: 340 }}
+                        value={aiBaseUrl}
                         placeholder="https://api.openai.com/v1"
-                        onChange={(event) => void patch({ cloudBaseUrl: event.target.value })}
+                        onChange={(event) => {
+                          setAiBaseUrl(event.target.value)
+                          setAiError('')
+                        }}
                       />
                     </div>
-                    <div className="setting-row">
-                      <span className="setting-row__text">
-                        <span className="setting-row__title">嵌入模型</span>
-                        <span className="setting-row__desc">
-                          {describeProvider(settings.cloudBaseUrl)}
-                          {modelsError ? ` · ${modelsError}` : ' · 常用模型可直接选，也可以从接口拉取'}
-                        </span>
-                      </span>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <ModelSelect
-                          value={settings.cloudModel}
-                          options={modelOptions(settings.cloudBaseUrl, 'embedding', remoteModels, settings.cloudModel)}
-                          placeholder="text-embedding-3-small"
-                          onChange={(value) => void patch({ cloudModel: value })}
-                        />
-                        <button
-                          type="button"
-                          className="linkbtn"
-                          disabled={loadingModels}
-                          onClick={() => void fetchModels()}
-                        >
-                          {loadingModels ? '获取中…' : '从接口获取'}
-                        </button>
-                      </div>
-                    </div>
+
                     <div className="setting-row">
                       <span className="setting-row__text">
                         <span className="setting-row__title">API Key</span>
                         <span className="setting-row__desc">
                           {cloudKeySaved
-                            ? '已保存（DPAPI 加密，仅当前用户可解）'
-                            : '未保存；填写后按 Windows DPAPI 加密落盘'}
+                            ? '已保存（DPAPI 加密）；填新的会覆盖，留空沿用已保存的'
+                            : '未保存；验证通过后才会加密落盘'}
+                        </span>
+                      </span>
+                      <input
+                        className="textfield"
+                        style={{ width: 340 }}
+                        type="password"
+                        value={cloudKeyDraft}
+                        placeholder={cloudKeySaved ? '••••••••（已保存）' : 'sk-...'}
+                        onChange={(event) => {
+                          setCloudKeyDraft(event.target.value)
+                          setAiError('')
+                        }}
+                      />
+                    </div>
+
+                    <div className="setting-row">
+                      <span className="setting-row__text">
+                        <span className="setting-row__title">嵌入模型</span>
+                        <span className="setting-row__desc">
+                          {describeProvider(aiBaseUrl)}
+                          {modelsError ? ` · ${modelsError}` : ' · 常用模型可直接选，也可用上面的地址与 Key 拉取'}
                         </span>
                       </span>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <input
-                          className="textfield"
-                          style={{ width: 240 }}
-                          type="password"
-                          value={cloudKeyDraft}
-                          placeholder={cloudKeySaved ? '••••••••（已保存）' : 'sk-...'}
-                          onChange={(event) => setCloudKeyDraft(event.target.value)}
+                        <ModelSelect
+                          value={aiModel}
+                          options={modelOptions(aiBaseUrl, 'embedding', remoteModels, aiModel)}
+                          placeholder="text-embedding-3-small"
+                          onChange={(value) => {
+                            setAiModel(value)
+                            setAiError('')
+                          }}
                         />
                         <button
                           type="button"
                           className="linkbtn"
-                          style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-                          onClick={() => {
-                            void patch({ cloudApiKey: cloudKeyDraft }).then(() => {
-                              setCloudKeyDraft('')
-                              void cloudKeyStatus().then(setCloudKeySaved)
-                            })
-                          }}
+                          disabled={loadingModels || !aiBaseUrl.trim() || !aiKeyReady}
+                          onClick={() => void fetchModels(aiBaseUrl, cloudKeyDraft || undefined)}
                         >
-                          保存
+                          {loadingModels ? '获取中…' : '从接口获取'}
                         </button>
                       </div>
                     </div>
+
                     <div className="setting-row">
                       <span className="setting-row__text">
-                        <span className="setting-row__title">连接测试</span>
                         <span className="setting-row__desc">
-                          {cloudTest
-                            ? cloudTest.ok
-                              ? `可用：${cloudTest.model} · ${cloudTest.dim} 维 · ${cloudTest.ms}ms`
-                              : `失败：${cloudTest.error}`
-                            : '用当前配置试算一次，确认地址、模型与 Key 都能用'}
+                          启用后会把待索引的正文片段和每次搜索的查询发送到上面填写的地址
+                          （<code>{aiBaseUrl || '（未填写）'}</code>）。
                         </span>
                       </span>
                       <button
                         type="button"
-                        className="linkbtn"
-                        style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-                        onClick={() => {
-                          void testCloudEmbedding({
-                            baseUrl: settings.cloudBaseUrl,
-                            model: settings.cloudModel,
-                            apiKey: cloudKeyDraft || undefined,
-                          })
-                            .then((result) => setCloudTest(result))
-                            .catch((error) => setCloudTest({ ok: false, error: String(error) }))
-                        }}
+                        className="btn btn--primary"
+                        disabled={aiBusy || !aiBaseUrl.trim() || !aiModel.trim() || !aiKeyReady}
+                        onClick={() => void enableSemantic()}
                       >
-                        测试连接
+                        {aiBusy ? '验证中…' : '验证并启用'}
                       </button>
                     </div>
                   </>
+                ) : (
+                  <div className="setting-row">
+                    <span className="setting-row__text">
+                      <span className="setting-row__title">本地模型</span>
+                      <span className="setting-row__desc">
+                        完全离线，文档与查询都不出网；首次启用下载约 25–100 MB 到应用数据目录，之后本地计算。
+                        {semantic.state === 'downloading' ? ' 正在下载模型…' : ''}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      disabled={aiBusy}
+                      onClick={() => void enableSemantic()}
+                    >
+                      {aiBusy ? '启用中…' : settings.semanticEnabled ? '重新启用' : '启用本地模型'}
+                    </button>
+                  </div>
                 )}
 
+                {aiError && (
+                  <div className="note" data-kind="error">
+                    <TriangleAlert size={14} strokeWidth={1.75} />
+                    <span>{aiError}</span>
+                  </div>
+                )}
+                {aiHint && (
+                  <div className="note" data-kind="info">
+                    <Info size={14} strokeWidth={1.75} />
+                    <span>{aiHint}</span>
+                  </div>
+                )}
+              </div>
+
+              <details className="setting-group ai-details">
+                <summary>索引管理</summary>
                 <div className="setting-row">
                   <span className="setting-row__text">
-                    <span className="setting-row__title">语义检索</span>
                     <span className="setting-row__desc">
-                      模型 {semantic.model || 'bge-small-zh-v1.5'} ·
-                      {' '}
-                      {semantic.state === 'ready'
-                        ? `已就绪（${semantic.chunks.toLocaleString('zh-CN')} 块 / ${semantic.vectors.toLocaleString('zh-CN')} 向量）`
-                        : semantic.state === 'downloading'
-                          ? '正在准备模型…'
-                          : semantic.state === 'error'
-                            ? `出错：${semantic.message ?? '未知原因'}`
-                            : semantic.enabled
-                              ? '等待建立索引'
-                              : '未启用'}
+                      更换提供方或嵌入模型会自动重建向量，重建期间语义结果暂不参与融合排序。
+                      {semantic.chunks > 0
+                        ? ` 当前 ${semantic.chunks.toLocaleString('zh-CN')} 块 / ${semantic.vectors.toLocaleString('zh-CN')} 向量。`
+                        : ''}
                     </span>
-                  </span>
-                  <Switch
-                    label="语义检索"
-                    checked={settings.semanticEnabled}
-                    disabled={settings.semanticProvider === 'cloud' && !settings.cloudConsent}
-                    onChange={(value) => {
-                      void setSemantic(value)
-                        .then(setSettings)
-                        .catch((error) => setCloudTest({ ok: false, error: String(error) }))
-                    }}
-                  />
-                </div>
-                <div className="setting-row">
-                  <span className="setting-row__desc">
-                    本地模型首次启用会下载约 25–100 MB，存放在应用数据目录；
-                    不启用时不下载、不占内存。索引完成后，搜索会为文件名、正文、语义三路结果做融合排序。
                   </span>
                   <button
                     type="button"
                     className="linkbtn"
-                    style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
                     onClick={() =>
                       void rebuildSemantic().then(() => getSemanticStatus().then(setSemanticState))
                     }
@@ -954,94 +1082,129 @@ export function Settings() {
                     重建语义索引
                   </button>
                 </div>
-              </div>
+              </details>
 
-              {settings.semanticProvider === 'cloud' && (
-                <div className="note" data-kind="warn">
-                  <TriangleAlert size={14} strokeWidth={1.75} />
-                  <span>
-                    <b>云端模式会发送两类内容：</b>
-                    ① 待索引文档的正文片段（每 400 字一块，单篇最多 40 块）；
-                    ② 每次搜索的查询文本。
-                    目标地址：<code>{settings.cloudBaseUrl || '（未填写）'}</code>，
-                    模型：<code>{settings.cloudModel || '（未填写）'}</code>。
-                    参与云端索引的目录：
-                    {settings.roots.length > 0
-                      ? settings.roots.map((root) => (
-                          <code key={root} style={{ marginLeft: 4 }}>
-                            {root}
-                          </code>
-                        ))
-                      : '（未添加目录）'}
-                    。不希望发送请切回「本地模型」。
-                  </span>
-                </div>
-              )}
-
-              {settings.semanticProvider === 'cloud' && (
+              <div className="setting-group">
                 <div className="setting-row">
                   <span className="setting-row__text">
-                    <span className="setting-row__title">确认数据边界</span>
+                    <span className="setting-row__title">
+                      AI 文件问答
+                      <span className={`ai-status ai-status--${chatTone}`}>{chatLabel}</span>
+                    </span>
                     <span className="setting-row__desc">
-                      勾选后才能开启云端语义索引；切换回本地模型不受限制。
+                      用聊天模型基于检索到的片段回答。和语义检索分开验证，但共用上面的接口地址与 Key。
                     </span>
                   </span>
-                  <Switch
-                    label="我已知晓并同意把文档片段发送到上述地址"
-                    checked={settings.cloudConsent}
-                    onChange={(value) => void patch({ cloudConsent: value })}
-                  />
                 </div>
-              )}
 
-              <div className="setting-group" style={{ marginTop: 20 }}>
-                <div className="setting-row">
-                  <span className="setting-row__text">
-                    <span className="setting-row__title">AI 文件助手</span>
-                    <span className="setting-row__desc">
-                      用本地检索挑出最相关的正文片段，再让云端模型基于这些片段回答（RAG），
-                      会复用上面的接口地址与 API Key。搜索框里按 Ctrl+Enter 提问。
-                    </span>
-                  </span>
-                  <Switch
-                    label="AI 文件助手"
-                    checked={settings.assistantEnabled}
-                    onChange={(value) => void patch({ assistantEnabled: value })}
-                  />
-                </div>
+                {aiProvider === 'local' && (
+                  <>
+                    <div className="setting-row">
+                      <span className="setting-row__text">
+                        <span className="setting-row__title">接口地址</span>
+                        <span className="setting-row__desc">只做问答也需要一个 OpenAI 兼容的接口</span>
+                      </span>
+                      <input
+                        className="textfield"
+                        style={{ width: 340 }}
+                        value={aiBaseUrl}
+                        placeholder="https://api.openai.com/v1"
+                        onChange={(event) => {
+                          setAiBaseUrl(event.target.value)
+                          setChatError('')
+                          setChatOk('')
+                        }}
+                      />
+                    </div>
+                    <div className="setting-row">
+                      <span className="setting-row__text">
+                        <span className="setting-row__title">API Key</span>
+                        <span className="setting-row__desc">
+                          {cloudKeySaved
+                            ? '已保存（DPAPI 加密）；填新的会覆盖，留空沿用已保存的'
+                            : '与语义检索共用；验证通过后才加密落盘'}
+                        </span>
+                      </span>
+                      <input
+                        className="textfield"
+                        style={{ width: 340 }}
+                        type="password"
+                        value={cloudKeyDraft}
+                        placeholder={cloudKeySaved ? '••••••••（已保存）' : 'sk-...'}
+                        onChange={(event) => {
+                          setCloudKeyDraft(event.target.value)
+                          setChatError('')
+                          setChatOk('')
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
+
                 <div className="setting-row">
                   <span className="setting-row__text">
                     <span className="setting-row__title">问答模型</span>
                     <span className="setting-row__desc">
-                      {describeProvider(settings.cloudBaseUrl)} · 需与接口地址兼容
+                      {describeProvider(aiBaseUrl || settings.cloudBaseUrl)} · 需与接口地址兼容
                     </span>
                   </span>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <ModelSelect
-                      value={settings.assistantModel}
-                      options={modelOptions(settings.cloudBaseUrl, 'chat', remoteModels, settings.assistantModel)}
+                      value={chatModelDraft}
+                      options={modelOptions(aiBaseUrl || settings.cloudBaseUrl, 'chat', remoteModels, chatModelDraft)}
                       placeholder="gpt-4o-mini"
-                      onChange={(value) => void patch({ assistantModel: value })}
+                      onChange={(value) => {
+                        setChatModelDraft(value)
+                        setChatError('')
+                        setChatOk('')
+                      }}
                     />
                     <button
                       type="button"
                       className="linkbtn"
-                      disabled={loadingModels}
-                      onClick={() => void fetchModels()}
+                      disabled={loadingModels || !(aiBaseUrl || settings.cloudBaseUrl).trim() || !aiKeyReady}
+                      onClick={() =>
+                        void fetchModels(aiBaseUrl || settings.cloudBaseUrl, cloudKeyDraft || undefined)
+                      }
                     >
                       {loadingModels ? '获取中…' : '从接口获取'}
                     </button>
                   </div>
                 </div>
-              </div>
 
-              <div className="note" data-kind="info">
-                <Info size={14} strokeWidth={1.75} />
-                <span>
-                  {settings.semanticProvider === 'cloud'
-                    ? '云端模式下，索引与搜索都会把文本发送到所填地址，请确认该服务的数据使用条款。'
-                    : '本地模式下所有向量都在本机计算，文档与查询都不出网。'}
-                </span>
+                <div className="setting-row">
+                  <span className="setting-row__text">
+                    <span className="setting-row__desc">
+                      验证会发一条最小请求，确认地址、模型与 Key 都能用；通过后才启用并保存。
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    disabled={
+                      chatBusy ||
+                      !chatModelDraft.trim() ||
+                      !(aiBaseUrl || settings.cloudBaseUrl).trim() ||
+                      !aiKeyReady
+                    }
+                    onClick={() => void enableChat()}
+                  >
+                    {chatBusy ? '验证中…' : '验证并启用'}
+                  </button>
+                </div>
+
+                {chatError && (
+                  <div className="note" data-kind="error">
+                    <TriangleAlert size={14} strokeWidth={1.75} />
+                    <span>{chatError}</span>
+                  </div>
+                )}
+                {chatOk && (
+                  <div className="note" data-kind="info">
+                    <Info size={14} strokeWidth={1.75} />
+                    <span>{chatOk}</span>
+                  </div>
+                )}
               </div>
             </>
           )}

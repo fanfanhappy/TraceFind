@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/fanfanhappy/TraceFind/releases/latest">下载 Windows 版</a> ·
-  <a href="docs/release-2.8.1.md">2.0.0 发布说明</a> ·
+  <a href="docs/release-2.9.0.md">2.0.0 发布说明</a> ·
   <a href="docs/DEVELOPMENT.md">开发指南</a> ·
   <a href="docs/DATA-AND-PRIVACY.md">数据与隐私</a>
 </p>
@@ -68,7 +68,7 @@
   </tr>
   <tr>
     <td width="50%"><img src="docs/screens/06-settings-search.png" alt="搜索与排序"><br /><sub>搜索与排序：相关度 / 时间 / 名称 / 大小</sub></td>
-    <td width="50%"><img src="docs/screens/07-settings-ai.png" alt="AI 与模型"><br /><sub>AI 与模型：本地模型或云端接口</sub></td>
+    <td width="50%"><img src="docs/screens/07-settings-ai.png" alt="AI 与模型"><br /><sub>AI 与模型：先选用途、再配置，验证并启用</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/screens/10-no-results.png" alt="无结果引导"><br /><sub>无结果：按已知状态给出下一步</sub></td>
@@ -195,7 +195,7 @@ pnpm dev
 ## 项目文档
 
 - [开发、构建与打包](docs/DEVELOPMENT.md)
-- [TraceFind 2.0.0 发布说明](docs/release-2.8.1.md)
+- [TraceFind 2.0.0 发布说明](docs/release-2.9.0.md)
 - [贡献与截图规范](docs/contributing.md)
 - [发布流程与验收清单](docs/releasing.md)
 - [历史变更](docs/changelog-0.6.0.md)

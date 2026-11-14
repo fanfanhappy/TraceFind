@@ -1102,21 +1102,35 @@ pub fn cloud_key_status(state: State<'_, AppState>) -> bool {
     !state.settings_snapshot().cloud_key.is_empty()
 }
 
-/// 列出接口支持的模型（OpenAI 兼容的 /models），供设置页下拉选择
+/// 列出接口支持的模型（OpenAI 兼容的 /models），供设置页下拉选择。
+/// 可以直接用页面上的草稿地址与 Key，不必先保存。
 #[tauri::command]
-pub fn list_models(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+pub fn list_models(
+    state: State<'_, AppState>,
+    base_url: Option<String>,
+    api_key: Option<String>,
+) -> Result<Vec<String>, String> {
     let settings = state.settings_snapshot();
-    if settings.cloud_base_url.trim().is_empty() {
+    let base = base_url
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| settings.cloud_base_url.trim().to_string());
+    if base.is_empty() {
         return Err("请先填写接口地址".to_string());
     }
-    if settings.cloud_key.is_empty() {
-        return Err("请先保存 API Key".to_string());
-    }
-    let key = crate::secrets::unprotect(&settings.cloud_key)?;
+    let key = match api_key.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()) {
+        Some(draft) => draft,
+        None => {
+            if settings.cloud_key.is_empty() {
+                return Err("请先填写 API Key（不用保存也能拉取）".to_string());
+            }
+            crate::secrets::unprotect(&settings.cloud_key)?
+        }
+    };
     if key.is_empty() {
         return Err("云端 API Key 未设置".to_string());
     }
-    let endpoint = format!("{}/models", settings.cloud_base_url.trim_end_matches('/'));
+    let endpoint = format!("{}/models", base.trim_end_matches('/'));
     let agent = ureq::AgentBuilder::new()
         .timeout(std::time::Duration::from_secs(15))
         .build();
@@ -1187,6 +1201,162 @@ pub fn test_cloud_embedding(
         "dim": dim,
         "ms": started.elapsed().as_millis() as u64,
         "model": settings.cloud_model,
+    }))
+}
+
+/// 验证并启用语义检索：先用页面草稿试算，成功才保存并（必要时）重建索引
+#[tauri::command]
+pub fn apply_embedding(
+    app: AppHandle<tauri::Wry>,
+    state: State<'_, AppState>,
+    provider: String,
+    base_url: String,
+    model: String,
+    api_key: Option<String>,
+    consent: bool,
+) -> Result<serde_json::Value, String> {
+    let current = state.settings_snapshot();
+    let provider = if provider.eq_ignore_ascii_case("cloud") {
+        "cloud".to_string()
+    } else {
+        "local".to_string()
+    };
+
+    let draft_key = api_key
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    let mut probe = current.clone();
+    probe.semantic_provider = provider.clone();
+    probe.cloud_base_url = base_url.trim().to_string();
+    probe.cloud_model = model.trim().to_string();
+    if let Some(key) = draft_key.as_deref() {
+        probe.cloud_key = crate::secrets::protect(key)?;
+    }
+
+    if provider == "cloud" {
+        if probe.cloud_base_url.is_empty() {
+            return Err("请先填写接口地址".to_string());
+        }
+        if probe.cloud_model.is_empty() {
+            return Err("请先填写嵌入模型".to_string());
+        }
+        if probe.cloud_key.is_empty() {
+            return Err("请先填写 API Key".to_string());
+        }
+        // 验证放在这里：同一份草稿，验证通过才落盘
+        crate::semantic::embed(&probe, vec!["连接测试".to_string()])
+            .map_err(|err| format!("验证失败：{err}"))?;
+    }
+
+    let changed = probe.semantic_provider != current.semantic_provider
+        || probe.cloud_model != current.cloud_model
+        || probe.cloud_base_url != current.cloud_base_url;
+
+    let settings = patch_settings(
+        app.clone(),
+        state,
+        SettingsPatch {
+            semantic_provider: Some(provider.clone()),
+            cloud_base_url: Some(probe.cloud_base_url.clone()),
+            cloud_model: Some(probe.cloud_model.clone()),
+            cloud_api_key: draft_key,
+            cloud_consent: Some(consent || current.cloud_consent),
+            semantic_enabled: Some(true),
+            ..Default::default()
+        },
+    );
+
+    let rebuilt = if changed {
+        rebuild_semantic(app.clone(), app.state::<AppState>())
+    } else {
+        false
+    };
+
+    Ok(serde_json::json!({
+        "settings": settings,
+        "rebuilt": rebuilt,
+        "provider": provider,
+    }))
+}
+
+/// 验证问答模型：发一条最小 chat 请求，确认地址/模型/Key 可用
+fn probe_chat(settings: &AppSettings) -> Result<u64, String> {
+    if settings.cloud_base_url.trim().is_empty() {
+        return Err("请先填写接口地址".to_string());
+    }
+    if settings.assistant_model.trim().is_empty() {
+        return Err("请先填写问答模型".to_string());
+    }
+    if settings.cloud_key.is_empty() {
+        return Err("请先填写 API Key".to_string());
+    }
+    let key = crate::secrets::unprotect(&settings.cloud_key)?;
+    if key.is_empty() {
+        return Err("云端 API Key 未设置".to_string());
+    }
+
+    let endpoint = format!(
+        "{}/chat/completions",
+        settings.cloud_base_url.trim_end_matches('/')
+    );
+    let payload = serde_json::json!({
+        "model": settings.assistant_model,
+        "messages": [{ "role": "user", "content": "ping" }],
+        "max_tokens": 1
+    });
+    let agent = ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_secs(25))
+        .build();
+    let started = std::time::Instant::now();
+    agent
+        .post(&endpoint)
+        .set("Authorization", &format!("Bearer {key}"))
+        .set("Content-Type", "application/json")
+        .set("User-Agent", "TraceFind")
+        .send_string(&payload.to_string())
+        .map_err(|err| format!("问答模型验证失败：{err}"))?;
+    Ok(started.elapsed().as_millis() as u64)
+}
+
+/// 验证并启用 AI 文件问答（与语义检索分开验证，共用接口地址与 Key）
+#[tauri::command]
+pub fn apply_chat(
+    app: AppHandle<tauri::Wry>,
+    state: State<'_, AppState>,
+    base_url: String,
+    model: String,
+    api_key: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let draft_key = api_key
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    let mut draft = state.settings_snapshot();
+    draft.cloud_base_url = base_url.trim().to_string();
+    draft.assistant_model = model.trim().to_string();
+    if let Some(key) = draft_key.as_deref() {
+        draft.cloud_key = crate::secrets::protect(key)?;
+    }
+
+    let ms = probe_chat(&draft)?;
+
+    let settings = patch_settings(
+        app,
+        state,
+        SettingsPatch {
+            cloud_base_url: Some(draft.cloud_base_url.clone()),
+            assistant_model: Some(draft.assistant_model.clone()),
+            cloud_api_key: draft_key,
+            assistant_enabled: Some(true),
+            ..Default::default()
+        },
+    );
+
+    Ok(serde_json::json!({
+        "settings": settings,
+        "ms": ms,
+        "model": draft.assistant_model,
     }))
 }
 

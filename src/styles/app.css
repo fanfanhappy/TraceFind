@@ -1477,6 +1477,7 @@ button.pill:hover {
 }
 
 .btn {
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1797,3 +1798,69 @@ html[data-leaving="true"] .settings-app {
   font-size: 11px;
   text-align: right;
 }
+/* ------------------------------ AI 页状态与折叠区 ------------------------------ */
+
+.note[data-kind="error"] {
+  border-color: color-mix(in srgb, var(--danger) 32%, var(--border-soft));
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.note[data-kind="error"] svg { color: var(--danger); }
+
+.ai-status {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 60%, transparent);
+  color: var(--text-subtle);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  vertical-align: 1px;
+}
+
+.ai-status--idle {
+  border-color: var(--accent-28);
+  background: var(--accent-08);
+  color: var(--accent);
+}
+
+.ai-status--busy {
+  border-color: color-mix(in srgb, var(--warning) 35%, transparent);
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  color: var(--warning);
+}
+
+.ai-status--ready {
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  color: var(--success);
+}
+
+.ai-status--error {
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+
+.ai-details summary {
+  padding: 10px var(--space-3);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ai-details summary::-webkit-details-marker { display: none; }
+
+.ai-details summary::before {
+  content: '▸';
+  margin-right: 8px;
+  color: var(--text-subtle);
+}
+
+.ai-details[open] summary::before { content: '▾'; }
+
+.ai-details summary:hover { color: var(--text); }
