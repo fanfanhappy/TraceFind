@@ -30,38 +30,51 @@ pub fn complete_onboarding<R: Runtime>(
     state: State<'_, AppState>,
     roots: Vec<String>,
 ) -> Result<AppSettings, String> {
-    let mut validated: Vec<String> = Vec::new();
-    for path in roots {
-        let root = scanner::normalize_root(&path)
-            .filter(|root| root.is_absolute())
-            .ok_or_else(|| format!("目录不可用：{path}"))?;
-        let root = root.to_string_lossy().into_owned();
-        if !validated.iter().any(|existing| existing.eq_ignore_ascii_case(&root)) {
-            validated.push(root);
-        }
-    }
-    let current = {
+    let (current, dropped_roots, roots_changed) = {
         let mut settings = state.settings.lock().unwrap_or_else(|err| err.into_inner());
-        // 重看引导时 roots 已经存在：保留原有配置，只补标记
-        // 只有"没配过目录"才算首次运行；重看引导不该改掉内容索引开关
-        let first_run = !settings.onboarding_complete && settings.roots.is_empty();
         let mut next = settings.clone();
-        if !validated.is_empty() {
+        if !roots.is_empty() {
+            let mut validated = Vec::<String>::new();
+            for path in roots {
+                let root = if let Some(existing) = settings.roots.iter()
+                    .find(|existing| existing.eq_ignore_ascii_case(&path))
+                {
+                    // Preserve existing roots even while a drive is disconnected.
+                    existing.clone()
+                } else {
+                    scanner::normalize_root(&path)
+                        .filter(|root| root.is_absolute())
+                        .ok_or_else(|| format!("目录不可用：{path}"))?
+                        .to_string_lossy()
+                        .into_owned()
+                };
+                if !validated.iter().any(|existing| existing.eq_ignore_ascii_case(&root)) {
+                    validated.push(root);
+                }
+            }
             next.roots = validated;
         }
         next.onboarding_complete = true;
-        if first_run {
-            // 首次运行先只索引文件名，避免一上来就扫全盘正文
+        if !settings.onboarding_complete && settings.roots.is_empty() {
             next.content_index = false;
             next.ocr_enabled = false;
         }
+        let dropped_roots: Vec<_> = settings.roots.iter()
+            .filter(|root| !next.roots.iter().any(|path| path.eq_ignore_ascii_case(root)))
+            .cloned()
+            .collect();
+        let roots_changed = next.roots != settings.roots;
         settings::save(&app, &next)?;
         *settings = next.clone();
-        next
+        (next, dropped_roots, roots_changed)
     };
-    if !current.roots.is_empty() {
+    if roots_changed {
+        bump_config_version(&app);
+        purge_paths(&app, &dropped_roots);
         restart_watcher(&app);
-        scanner::spawn_full(&app);
+        if !scanner::is_running(&app) {
+            scanner::spawn_full(&app);
+        }
     }
     let current = settings::redacted(current);
     let _ = app.emit("aura:settings-changed", current.clone());

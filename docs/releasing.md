@@ -14,9 +14,31 @@
 
 ## tag 与 release 解耦
 
-- **tag**：每个可构建点都可以打，成本低、不通知关注者
-- **release**：按批次创建，先 draft，自测通过再 publish
-- 这样避免"发了又改"，也避免旧版本堆积（发之前删掉上一轮的 draft）
+- **tag：每个版本都打，永不删除。** 它是代码历史的锚点：`git describe`、复现问题、issue 定位都靠它。tag 不发通知、不占下载页，成本几乎为零
+- **release：按批次创建，先 draft，自测通过再 publish。** 默认只保留最近 3 个，更老的删 Release（保留 tag 与 `docs/release-x.y.z.md`）
+- 这样既避免"发了又改"和旧版本堆积，也不丢可追溯性
+
+### 删 Release、留 tag 的边界
+
+| 保留 | 删除 |
+|---|---|
+| 所有 git tag | 超过 3 个版本的 Release 页面 |
+| `docs/release-x.y.z.md` 全部保留 | 对应的 zip 资产（本地 `release/` 可清理） |
+| Latest 指向最新版 | — |
+
+### 撤版
+
+发现某版本有严重问题时**不要静默删除**：把 Release 说明改成「已撤回，请使用 x.y.z」，保留 tag 与说明文件。静默删除会让"发布记录"失去可信度。
+
+### 补 tag
+
+误删 tag 时可以从提交历史重建，先确认该提交里的版本号：
+
+```powershell
+git show <commit>:src-tauri/Cargo.toml | Select-String '^version'
+git tag -a v2.0.0 <commit> -m "TraceFind 2.0.0"
+git push origin v2.0.0
+```
 
 ## 版本号
 

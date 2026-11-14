@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, Check, FolderPlus, Loader2, Sparkles } from 'lucide-react'
 import { BrandMark } from './BrandMark'
 import {
@@ -12,7 +12,7 @@ interface Props {
   settings: AppSettings
   /** 实际注册成功的快捷键（配置被占用时会降级） */
   hotkey: string
-  onDone: (next: AppSettings) => void
+  onDone: (next: AppSettings, skipped: boolean) => void
 }
 
 function labelOf(path: string) {
@@ -24,7 +24,10 @@ function labelOf(path: string) {
 export function Onboarding({ settings, hotkey, onDone }: Props) {
   const [step, setStep] = useState(0)
   const [suggested, setSuggested] = useState<string[]>([])
-  const [picked, setPicked] = useState<string[]>([])
+  const [picked, setPicked] = useState<string[]>(settings.roots)
+  const [custom, setCustom] = useState<string[]>(settings.roots)
+  const [loadingRoots, setLoadingRoots] = useState(true)
+  const dialog = useRef<HTMLDivElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -33,12 +36,20 @@ export function Onboarding({ settings, hotkey, onDone }: Props) {
     void suggestedRoots().then((roots) => {
       if (!alive) return
       setSuggested(roots)
-      setPicked((current) => (current.length ? current : roots))
+      if (!settings.roots.length) setPicked(roots)
+    }).catch(() => {
+      if (alive) setError("无法读取推荐目录，请手动添加文件夹。")
+    }).finally(() => {
+      if (alive) setLoadingRoots(false)
     })
     return () => {
       alive = false
     }
   }, [])
+
+  useEffect(() => {
+    dialog.current?.querySelector('h2')?.focus()
+  }, [step])
 
   const toggle = (root: string) =>
     setPicked((current) =>
@@ -52,13 +63,15 @@ export function Onboarding({ settings, hotkey, onDone }: Props) {
     try {
       const roots = await pickFolders()
       if (!roots.length) return
-      setPicked((current) => {
+      const append = (current: string[]) => {
         const next = [...current]
         for (const root of roots) {
           if (!next.some((item) => item.toLowerCase() === root.toLowerCase())) next.push(root)
         }
         return next
-      })
+      }
+      setCustom(append)
+      setPicked(append)
     } catch (err) {
       setError(String(err))
     }
@@ -70,7 +83,7 @@ export function Onboarding({ settings, hotkey, onDone }: Props) {
       setError('')
       try {
         const next = await completeOnboarding(roots)
-        onDone(next)
+        onDone(next, roots.length === 0)
       } catch (err) {
         setError(String(err))
         setBusy(false)
@@ -80,10 +93,14 @@ export function Onboarding({ settings, hotkey, onDone }: Props) {
   )
 
   const reduce = settings.reducedMotion
+  const folders = [...new Map([...suggested, ...custom].map((root) => [root.toLowerCase(), root])).values()]
+  const indexing = settings.roots.length && settings.contentIndex
+    ? (settings.ocrEnabled ? '文件名、正文和 OCR' : '文件名和正文')
+    : '文件名与路径'
   const chosen = useMemo(() => picked.filter(Boolean), [picked])
 
   return (
-    <div className="onboarding" data-reduce={reduce ? 'true' : undefined} role="dialog" aria-label="首次使用引导">
+    <div ref={dialog} aria-modal="true" className="onboarding" data-reduce={reduce ? 'true' : undefined} role="dialog" aria-label="首次使用引导">
       <div className="onboarding__steps" aria-hidden>
         {[0, 1, 2].map((index) => (
           <span key={index} className="onboarding__dot" data-on={index === step ? 'true' : undefined} />
@@ -95,7 +112,7 @@ export function Onboarding({ settings, hotkey, onDone }: Props) {
           <span className="onboarding__mark" aria-hidden>
             <BrandMark size={44} />
           </span>
-          <h2 className="onboarding__title">TraceFind</h2>
+          <h2 tabIndex={-1} className="onboarding__title">TraceFind</h2>
           <p className="onboarding__lead">忘了文件名，记得一点也能找。</p>
           <ul className="onboarding__points">
             <li>文件名、拼音、正文，一个框全搜</li>
@@ -103,24 +120,25 @@ export function Onboarding({ settings, hotkey, onDone }: Props) {
             <li>记不住原词，也可以直接问</li>
           </ul>
           <div className="onboarding__actions">
-            <button type="button" className="btn btn--primary" onClick={() => setStep(1)}>
+            <button type="button" className="btn btn--primary" disabled={busy} onClick={() => setStep(1)}>
               开始
               <ArrowRight size={14} strokeWidth={2} />
             </button>
-            <button type="button" className="linkbtn" onClick={() => void finish([])}>
+            <button type="button" className="linkbtn" disabled={busy} onClick={() => void finish([])}>
               跳过
             </button>
           </div>
+          {error && <small role="alert" className="onboarding__hint onboarding__hint--error">{error}</small>}
         </div>
       )}
 
       {step === 1 && (
         <div className="onboarding__panel" key="folders">
-          <h2 className="onboarding__title onboarding__title--sm">要搜哪些文件夹？</h2>
-          <p className="onboarding__lead">只读文件名与路径，不读内容；之后可以在设置里改。</p>
+          <h2 tabIndex={-1} className="onboarding__title onboarding__title--sm">要搜哪些文件夹？</h2>
+          <p className="onboarding__lead">当前将索引{indexing}。之后可在设置里调整。</p>
 
           <div className="onboarding__grid">
-            {suggested.map((root) => {
+            {folders.map((root) => {
               const active = chosen.some((item) => item.toLowerCase() === root.toLowerCase())
               return (
                 <button
@@ -128,6 +146,7 @@ export function Onboarding({ settings, hotkey, onDone }: Props) {
                   type="button"
                   className="onboarding__root"
                   aria-pressed={active}
+                  disabled={loadingRoots}
                   onClick={() => toggle(root)}
                 >
                   <span className="onboarding__check" aria-hidden>
@@ -141,7 +160,7 @@ export function Onboarding({ settings, hotkey, onDone }: Props) {
               )
             })}
 
-            <button type="button" className="onboarding__root onboarding__root--add" onClick={() => void addFolder()}>
+            <button type="button" className="onboarding__root onboarding__root--add" disabled={loadingRoots} onClick={() => void addFolder()}>
               <span className="onboarding__check" aria-hidden>
                 <FolderPlus size={13} strokeWidth={2} />
               </span>
@@ -157,7 +176,7 @@ export function Onboarding({ settings, hotkey, onDone }: Props) {
             <button
               type="button"
               className="btn btn--primary"
-              disabled={chosen.length === 0 || busy}
+              disabled={loadingRoots || chosen.length === 0 || busy}
               onClick={() => setStep(2)}
             >
               下一步
@@ -165,7 +184,7 @@ export function Onboarding({ settings, hotkey, onDone }: Props) {
             </button>
           </div>
           {chosen.length === 0 && <small className="onboarding__hint">至少选一个文件夹</small>}
-          {error && <small className="onboarding__hint onboarding__hint--error">{error}</small>}
+          {error && <small role="alert" className="onboarding__hint onboarding__hint--error">{error}</small>}
         </div>
       )}
 
@@ -174,9 +193,9 @@ export function Onboarding({ settings, hotkey, onDone }: Props) {
           <span className="onboarding__mark onboarding__mark--glow" aria-hidden>
             <Sparkles size={30} strokeWidth={1.7} />
           </span>
-          <h2 className="onboarding__title onboarding__title--sm">可以开始了</h2>
+          <h2 tabIndex={-1} className="onboarding__title onboarding__title--sm">可以开始了</h2>
           <p className="onboarding__lead">
-            索引 {chosen.length} 个文件夹，先只收文件名，几秒钟就好。
+            已选 {chosen.length} 个文件夹，将索引{indexing}。
           </p>
 
           <div className="onboarding__keys">
@@ -203,7 +222,7 @@ export function Onboarding({ settings, hotkey, onDone }: Props) {
               建立索引并开始
             </button>
           </div>
-          {error && <small className="onboarding__hint onboarding__hint--error">{error}</small>}
+          {error && <small role="alert" className="onboarding__hint onboarding__hint--error">{error}</small>}
         </div>
       )}
     </div>

@@ -82,7 +82,7 @@
 
 ## 开始使用
 
-1. 从 [GitHub Releases](https://github.com/fanfanhappy/TraceFind/releases/latest) 获取 Windows x64 压缩包，解压后运行 `TraceFind.exe`。程序依赖 **WebView2 Runtime**。
+1. 从 [GitHub Releases](https://github.com/fanfanhappy/TraceFind/releases/latest) 获取 Windows x64 压缩包，解压后运行 `TraceFind.exe`。程序依赖 **WebView2 Runtime**。仅最新版受支持；历史版本保留在 tag 中，仅供回退与排查。
 2. 在 **设置 → 索引与扫描** 查看索引范围，把常用项目目录加进去。首次索引耗时随文件数量、格式和所启用的索引能力而变化。
 3. 输入文件名或正文关键词。需要按大意查找时，在 **设置 → AI 与模型** 开启本地语义检索，首次使用会下载模型。
 

@@ -434,7 +434,10 @@ export function Launcher() {
     inputRef.current?.blur()
   }
 
+  const onboardingOpen = isDesktop && ready && !settings.onboardingComplete
+
   function onKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (onboardingOpen) return
     // 输入法组合期间不接管按键（中文输入必须可用）
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
     const inInput = event.target === inputRef.current
@@ -553,10 +556,11 @@ export function Launcher() {
       className="shell launcher"
       data-phase={phase}
       data-preview={previewFile ? 'true' : 'false'}
-      data-onboarding={isDesktop && ready && !settings.onboardingComplete ? 'true' : undefined}
+      data-onboarding={onboardingOpen ? 'true' : undefined}
       onAnimationEnd={onAnimationEnd}
       onKeyDown={onKeyDown}
     >
+      <div inert={onboardingOpen} style={{ display: "contents" }}>
       <BrandBar
         pinned={settings.alwaysOnTop}
         desktop={isDesktop}
@@ -751,13 +755,17 @@ export function Launcher() {
         }}
       />
 
-      {isDesktop && ready && !settings.onboardingComplete && (
+      </div>
+      {onboardingOpen && (
         <Onboarding
           settings={settings}
           hotkey={effectiveHotkey}
-          onDone={(next) => {
+          onDone={(next, skipped) => {
             setSettings(next)
-            setStatus('索引已开始，稍等一下就能搜')
+            setStatus(next.roots.length === 0
+              ? '可在设置中添加索引目录'
+              : skipped ? '' : '可在状态栏查看索引进度')
+            focusInput()
           }}
         />
       )}
