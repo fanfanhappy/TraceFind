@@ -1,0 +1,281 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>TraceFind 20s</title>
+    <style>
+      :root {
+        --bg: #0b0d11;
+        --text: #eef1f6;
+        --muted: #9aa3b2;
+        --mint: #b8f2d8;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #000; }
+      body {
+        font-family: 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+        color: var(--text);
+      }
+      .film { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+
+      /* 每个镜头：满幅截图 + 压暗边缘 */
+      .shot { position: absolute; inset: 0; will-change: opacity, transform; }
+      /* 背景：同一张图放大模糊，填满画面，避免硬裁切 */
+      .shot .bg {
+        position: absolute; inset: -60px;
+        background-size: cover; background-position: center;
+        filter: blur(48px) saturate(0.78) brightness(0.34);
+        transform: scale(1.1);
+      }
+      .shot img {
+        position: absolute;
+        top: 46px; bottom: 246px; left: 50%;
+        height: calc(100% - 292px); width: auto;
+        transform: translateX(-50%);
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 34px 100px rgba(0, 0, 0, 0.65), 0 4px 18px rgba(0, 0, 0, 0.45);
+        display: block;
+      }
+      .shot::after {
+        content: '';
+        position: absolute; inset: 0;
+        background:
+          linear-gradient(180deg, rgba(6,8,12,0.35) 0%, rgba(6,8,12,0) 18%, rgba(6,8,12,0.35) 56%, rgba(6,8,12,0.94) 82%, rgba(6,8,12,0.99) 100%),
+          radial-gradient(120% 90% at 50% 42%, rgba(0,0,0,0) 52%, rgba(0,0,0,0.5) 100%);
+      }
+
+      .caption {
+        position: absolute; left: 96px; bottom: 108px; z-index: 5;
+        max-width: 1100px;
+      }
+      .caption .kicker {
+        display: inline-flex; align-items: center; gap: 8px;
+        font-size: 15px; letter-spacing: 2px; color: var(--mint); margin-bottom: 16px;
+      }
+      .caption .kicker::before {
+        content: ''; width: 26px; height: 2px; background: var(--mint); display: block;
+      }
+      .caption h2 {
+        font-size: 58px; line-height: 1.16; font-weight: 800; letter-spacing: 0.6px;
+        text-shadow: 0 6px 28px rgba(0, 0, 0, 0.85);
+      }
+      .caption p {
+        margin-top: 14px; font-size: 20px; color: var(--muted); letter-spacing: 0.3px;
+        text-shadow: 0 4px 18px rgba(0, 0, 0, 0.9);
+      }
+      .caption .kicker { text-shadow: 0 3px 14px rgba(0, 0, 0, 0.9); }
+
+      /* 片头 */
+      .intro {
+        position: absolute; inset: 0; z-index: 20;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background:
+          radial-gradient(760px 520px at 50% 34%, rgba(184, 242, 216, 0.12), transparent 64%),
+          var(--bg);
+      }
+      .mark {
+        width: 108px; height: 108px; border-radius: 26px;
+        border: 1px solid rgba(184, 242, 216, 0.34);
+        background: linear-gradient(160deg, #1f2531, #12161e);
+        display: flex; align-items: center; justify-content: center; color: var(--mint);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      }
+      .intro h1 { margin-top: 34px; font-size: 86px; font-weight: 800; letter-spacing: 1px; }
+      .intro p { margin-top: 18px; font-size: 26px; color: var(--muted); letter-spacing: 1px; }
+
+      /* 收尾 */
+      .outro {
+        position: absolute; inset: 0; z-index: 20;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background:
+          radial-gradient(820px 560px at 50% 30%, rgba(184, 242, 216, 0.13), transparent 66%),
+          var(--bg);
+      }
+      .stats { display: flex; gap: 92px; margin-bottom: 56px; }
+      .stat { text-align: center; }
+      .stat .v { font-size: 72px; font-weight: 800; letter-spacing: 1px; }
+      .stat .v small { font-size: 24px; color: var(--muted); margin-left: 4px; font-weight: 700; }
+      .stat .k { margin-top: 10px; font-size: 16px; color: var(--dim, #6f7787); letter-spacing: 1px; }
+      .outro .brandline { display: flex; align-items: center; gap: 16px; }
+      .outro .brandline span { font-size: 40px; font-weight: 800; letter-spacing: 0.5px; }
+      .outro .repo { margin-top: 26px; font-size: 20px; color: var(--dim, #6f7787); }
+      .outro .repo b { color: var(--muted); font-weight: 600; }
+
+      /* 黑场与暗角 */
+      .fade { position: absolute; inset: 0; background: #000; z-index: 40; pointer-events: none; }
+      .vignette {
+        position: absolute; inset: 0; pointer-events: none; z-index: 30;
+        box-shadow: inset 0 0 220px rgba(0, 0, 0, 0.75);
+      }
+      .progress { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--mint); z-index: 35; opacity: 0.55; }
+    </style>
+  </head>
+  <body>
+    <div class="film">
+      <!-- 1. 搜索 -->
+      <div class="shot" data-shot="search">
+        <div class="bg"></div>
+        <img src="../screens/01-search.png" alt="" />
+      </div>
+
+      <!-- 2. 文档预览 -->
+      <div class="shot" data-shot="docx">
+        <div class="bg"></div>
+        <img src="../screens/02-preview-docx.png" alt="" />
+      </div>
+
+      <!-- 3. 代码预览 -->
+      <div class="shot" data-shot="code">
+        <div class="bg"></div>
+        <img src="../screens/03-preview-code.png" alt="" />
+      </div>
+
+      <!-- 4. 类型筛选 -->
+      <div class="shot" data-shot="filter">
+        <div class="bg"></div>
+        <img src="../screens/05-filter-code.png" alt="" />
+      </div>
+
+      <!-- 5. AI 问答 -->
+      <div class="shot" data-shot="ask">
+        <div class="bg"></div>
+        <img src="../screens/08-ai-ask.png" alt="" />
+      </div>
+
+      <div class="caption" id="caption">
+        <div class="kicker" id="kicker">TRACEFIND</div>
+        <h2 id="cap-title">文件名、拼音、正文，一次搜</h2>
+        <p id="cap-sub">Everything 找名字，TraceFind 找内容</p>
+      </div>
+
+      <div class="intro" id="intro">
+        <div class="mark">
+          <svg width="58" height="58" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.2c.6 0 1.1.3 1.5.8l.9 1.2h7.4A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />
+            <path d="M9 11.6v-1a1 1 0 0 1 1-1h1" />
+            <path d="M15 11.6v-1a1 1 0 0 0-1-1h-1" />
+            <path d="M9 14.4v1a1 1 0 0 0 1 1h1" />
+            <path d="M15 14.4v1a1 1 0 0 1-1 1h-1" />
+            <circle cx="12" cy="13" r="0.95" fill="currentColor" stroke="none" />
+          </svg>
+        </div>
+        <h1>TraceFind</h1>
+        <p>忘了文件名，记得一点也能找。</p>
+      </div>
+
+      <div class="outro" id="outro">
+        <div class="stats">
+          <div class="stat" data-i="0"><div class="v">118<small>ms</small></div><div class="k">冷启动</div></div>
+          <div class="stat" data-i="1"><div class="v">27<small>ms</small></div><div class="k">搜索 P50</div></div>
+          <div class="stat" data-i="2"><div class="v">0<small>KB</small></div><div class="k">OCR 模型</div></div>
+        </div>
+        <div class="brandline"><span>TraceFind</span></div>
+        <div class="repo">github.com/<b>fanfanhappy/TraceFind</b> · MIT</div>
+      </div>
+
+      <div class="vignette"></div>
+      <div class="fade" id="fade"></div>
+    </div>
+
+    <script>
+      const TOTAL = 20.0;
+      const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+      const easeOut = (x) => 1 - Math.pow(1 - x, 3);
+      const easeInOut = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+      const win = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
+
+      const shots = [...document.querySelectorAll('.shot')];
+      const byName = Object.fromEntries(shots.map((el) => [el.dataset.shot, el]));
+      // 背景层复用同一张截图
+      for (const el of shots) {
+        const img = el.querySelector('img');
+        const bg = el.querySelector('.bg');
+        if (img && bg) bg.style.backgroundImage = `url("${img.getAttribute('src')}")`;
+      }
+      const caption = document.getElementById('caption');
+      const capTitle = document.getElementById('cap-title');
+      const capSub = document.getElementById('cap-sub');
+      const kicker = document.getElementById('kicker');
+      const intro = document.getElementById('intro');
+      const outro = document.getElementById('outro');
+      const fade = document.getElementById('fade');
+
+      // 镜头时间轴：[开始, 结束]，以及字幕
+      const SCENES = [
+        { key: 'search', from: 2.4, to: 6.4, title: '文件名、拼音、正文，一次搜', sub: '输入 cwbg 也能命中「财务预算报告」' },
+        { key: 'docx', from: 6.4, to: 10.4, title: '先看，再决定打开', sub: 'Ctrl + Space 预览正文，命中词高亮' },
+        { key: 'code', from: 10.4, to: 12.6, title: '代码也能直接读', sub: '语法高亮，长文件分页加载' },
+        { key: 'filter', from: 12.6, to: 14.6, title: '按类型收窄', sub: '文档 / 图片 / 代码 / 文件夹' },
+        { key: 'ask', from: 14.6, to: 18.0, title: '记不住原词？直接问', sub: 'Ctrl + Shift + Enter，答案带 [n] 引用' },
+      ];
+
+      function render(t) {
+        // 片头 0 → 2.2
+        const introOut = win(t, 2.0, 2.6);
+        intro.style.opacity = String(1 - introOut);
+        const introIn = easeOut(win(t, 0.15, 1.25));
+        intro.style.transform = `scale(${0.965 + 0.035 * introIn})`;
+        intro.style.visibility = introOut >= 1 ? 'hidden' : 'visible';
+
+        // 镜头
+        for (const scene of SCENES) {
+          const el = byName[scene.key];
+          const local = win(t, scene.from, scene.to);
+          const visible = t >= scene.from - 0.5 && t <= scene.to + 0.5;
+          if (!visible) {
+            el.style.opacity = '0';
+            el.style.visibility = 'hidden';
+            continue;
+          }
+          el.style.visibility = 'visible';
+          const inAlpha = easeOut(win(t, scene.from - 0.45, scene.from + 0.35));
+          const outAlpha = 1 - easeInOut(win(t, scene.to - 0.5, scene.to + 0.2));
+          el.style.opacity = String(Math.min(inAlpha, outAlpha));
+          // 缓慢推近 + 轻微上移（Ken Burns）
+          const p = easeInOut(local);
+          const scale = 1.05 - 0.05 * p;
+          const shift = -14 * p;
+          el.style.transform = `scale(${scale}) translateY(${shift}px)`;
+        }
+
+        // 字幕：跟随当前镜头，末段淡出
+        const active = SCENES.find((s) => t >= s.from && t < s.to);
+        if (active) {
+          const local = win(t, active.from, active.to);
+          const a = Math.min(easeOut(win(t, active.from, active.from + 0.45)), 1 - easeInOut(win(t, active.to - 0.35, active.to)));
+          capTitle.textContent = active.title;
+          capSub.textContent = active.sub;
+          kicker.textContent = 'TRACEFIND';
+          caption.style.opacity = String(a);
+          caption.style.transform = `translateY(${(1 - easeOut(win(t, active.from, active.from + 0.6))) * 26}px)`;
+        } else {
+          caption.style.opacity = '0';
+        }
+
+        // 收尾 18.0 → 20.0
+        const outroIn = win(t, 17.8, 18.9);
+        outro.style.opacity = String(easeOut(outroIn));
+        outro.style.visibility = outroIn > 0 ? 'visible' : 'hidden';
+        for (const el of outro.querySelectorAll('.stat')) {
+          const index = Number(el.dataset.i);
+          const local = easeOut(win(t, 18.0 + index * 0.18, 18.6 + index * 0.18));
+          el.style.opacity = String(local);
+          el.style.transform = `translateY(${(1 - local) * 18}px)`;
+        }
+
+        // 全片黑场：开头 0.35s 淡入、结尾 0.7s 淡出
+        const inBlack = 1 - easeOut(win(t, 0.0, 0.5));
+        const outBlack = easeInOut(win(t, TOTAL - 0.75, TOTAL));
+        fade.style.opacity = String(Math.max(inBlack, outBlack));
+      }
+
+      window.__render = (t) => {
+        render(t);
+        return true;
+      };
+      window.__duration = TOTAL;
+      render(0);
+    </script>
+  </body>
+</html>
