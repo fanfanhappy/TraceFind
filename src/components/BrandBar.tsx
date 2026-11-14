@@ -3,8 +3,6 @@ import { BrandMark } from './BrandMark'
 import { startDrag } from '../lib/bridge'
 
 interface Props {
-  /** 运行版本号，取自 getRuntimeInfo；缺省时显示 dev */
-  version?: string
   pinned: boolean
   desktop: boolean
   onTogglePin: () => void
@@ -13,7 +11,7 @@ interface Props {
 }
 
 /** 02｜顶部品牌栏：48px，控制项保持低视觉权重 */
-export function BrandBar({ version, pinned, desktop, onTogglePin, onOpenSettings, onClose }: Props) {
+export function BrandBar({ pinned, desktop, onTogglePin, onOpenSettings, onClose }: Props) {
   return (
     <header
       className="brandbar"
@@ -25,9 +23,6 @@ export function BrandBar({ version, pinned, desktop, onTogglePin, onOpenSettings
           <BrandMark size={17} />
         </span>
         <span data-tauri-drag-region>TraceFind</span>
-        <span className="brandbar__version" data-tauri-drag-region>
-          {version ?? 'dev'}
-        </span>
       </div>
 
       <div className="brandbar__controls">

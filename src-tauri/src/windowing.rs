@@ -66,7 +66,7 @@ pub fn ensure_settings<R: Runtime>(app: &tauri::AppHandle<R>) {
     }
 
     let builder = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
-    .title("AURA Search · 设置")
+    .title("TraceFind · 设置")
     .inner_size(900.0, 620.0)
     .min_inner_size(780.0, 540.0)
     .center()

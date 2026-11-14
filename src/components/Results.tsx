@@ -64,19 +64,19 @@ function Row({ file, index, active, query, onHover, onActivate, onPreview, onRev
       </span>
 
       <span className="result__text">
-        <span className="result__name">
+        <span className="result__name" title={file.name}>
           {name.map((part, i) => (part.hit ? <mark key={i}>{part.text}</mark> : <span key={i}>{part.text}</span>))}
         </span>
-        <span className="result__path">
-          {dir.map((part, i) => (part.hit ? <mark key={i}>{part.text}</mark> : <span key={i}>{part.text}</span>))}
+        {/* 第二行只占一行：有正文片段就显示片段，否则显示目录，避免行高抖动 */}
+        <span className={file.snippet ? 'result__snippet' : 'result__path'} title={file.path}>
+          {file.snippet
+            ? highlight(file.snippet, query).map((part, i) =>
+                part.hit ? <mark key={i}>{part.text}</mark> : <span key={i}>{part.text}</span>,
+              )
+            : dir.map((part, i) =>
+                part.hit ? <mark key={i}>{part.text}</mark> : <span key={i}>{part.text}</span>,
+              )}
         </span>
-        {file.snippet && (
-          <span className="result__snippet">
-            {highlight(file.snippet, query).map((part, i) =>
-              part.hit ? <mark key={i}>{part.text}</mark> : <span key={i}>{part.text}</span>,
-            )}
-          </span>
-        )}
       </span>
 
       <span className="result__meta">

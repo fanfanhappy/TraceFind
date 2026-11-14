@@ -231,7 +231,6 @@ export function Settings() {
             <ArrowLeft size={16} strokeWidth={1.9} />
           </button>
           <span data-tauri-drag-region>TraceFind</span>
-          <span className="brandbar__version">{info?.version ?? 'dev'}</span>
         </div>
         <div className="brandbar__controls">
           <button

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { ExternalLink, FolderOpen, Loader2, X } from 'lucide-react'
 import { previewFile, type PreviewPayload } from '../lib/bridge'
 import { formatModified, formatSize, type SearchHit } from '../lib/files'
@@ -114,11 +114,17 @@ export function PreviewDrawer({ file, query, onClose, onOpen, onReveal }: Props)
   }
 
   return (
-    <aside className="drawer preview" aria-label="快速预览">
+    <aside className="drawer preview" data-code={isCode ? "true" : "false"} aria-label="快速预览">
       <div className="drawer__head">
         <span className="preview__title" title={file.path}>
           {file.name}
         </span>
+        <button type="button" className="iconbtn interactive" title="打开" aria-label="打开" onClick={() => onOpen(file)}>
+          <ExternalLink size={15} strokeWidth={1.75} />
+        </button>
+        <button type="button" className="iconbtn interactive" title="定位" aria-label="定位" onClick={() => onReveal(file)}>
+          <FolderOpen size={15} strokeWidth={1.75} />
+        </button>
         <button type="button" className="iconbtn" title="关闭预览  Esc" aria-label="关闭预览" onClick={onClose}>
           <X size={15} strokeWidth={1.75} />
         </button>
@@ -177,16 +183,7 @@ export function PreviewDrawer({ file, query, onClose, onOpen, onReveal }: Props)
         </div>
       )}
 
-      <div className="preview__footer">
-        <button type="button" className="linkbtn" onClick={() => onOpen(file)}>
-          <ExternalLink size={12} strokeWidth={1.9} />
-          打开
-        </button>
-        <button type="button" className="linkbtn" onClick={() => onReveal(file)}>
-          <FolderOpen size={12} strokeWidth={1.9} />
-          定位
-        </button>
-      </div>
+
     </aside>
   )
 }

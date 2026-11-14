@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AnimationEvent as ReactAnimationEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { BrandBar } from '../components/BrandBar'
 import { SearchField } from '../components/SearchField'
@@ -76,7 +76,6 @@ export function Launcher() {
   const [hotkeyActive, setHotkeyActive] = useState(true)
   const [effectiveHotkey, setEffectiveHotkey] = useState('Alt+Space')
   const [hotkeyFallback, setHotkeyFallback] = useState(false)
-  const [version, setVersion] = useState<string | undefined>(undefined)
   const [ask, setAsk] = useState<{ question: string; answer: Awaited<ReturnType<typeof askFiles>> | null; loading: boolean; error: string | null } | null>(null)
   const [revision, setRevision] = useState(0)
   const [phase, setPhase] = useState<LauncherPhase>(isDesktop ? 'hidden' : 'visible')
@@ -118,7 +117,6 @@ export function Launcher() {
       applyMaterial(info.material)
       setHotkeyActive(info.hotkeyActive)
       setEffectiveHotkey(info.hotkey || loaded.hotkey)
-      setVersion(info.version)
       setHotkeyFallback(Boolean(info.hotkeyFallback))
       if (info.hotkeyFallback && info.hotkeyConfigured) {
         setStatus(`${info.hotkeyConfigured} 被其他程序占用，已临时使用 ${info.hotkey}；可在设置里固定`)
@@ -467,7 +465,6 @@ export function Launcher() {
       onKeyDown={onKeyDown}
     >
       <BrandBar
-        version={version}
         pinned={settings.alwaysOnTop}
         desktop={isDesktop}
         onTogglePin={() => void togglePin()}
@@ -489,21 +486,13 @@ export function Launcher() {
         />
 
         <div className="content">
-          {!ask && (
-            <div className="content__head">
-              <span>{query ? '搜索结果' : scope ? '该目录最近使用' : '最近使用'}</span>
-              <span>
-                {query
-                  ? `${hits.length} 项`
-                  : index.state === 'scanning'
-                    ? `索引中 ${index.scanned}`
-                    : '按 ↓ 浏览'}
-              </span>
-            </div>
-          )}
+
 
           {!ask && (<div className="filters" role="toolbar" aria-label="结果类型筛选">
-            {TYPE_FILTERS.map((item) => (
+            {previewOpen ? (
+              <span className="filters__label">{query ? '搜索结果' : '最近使用'}</span>
+            ) : (
+              TYPE_FILTERS.map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -517,15 +506,20 @@ export function Launcher() {
               >
                 {item.label}
               </button>
-            ))}
-            <span className="filters__hint">
-              {settings.sortMode === 'recent'
-                ? '按修改时间'
-                : settings.sortMode === 'name'
-                  ? '按名称'
-                  : settings.sortMode === 'size'
-                    ? '按大小'
-                    : '按相关度'}
+              ))
+            )}
+            <span className="filters__meta">
+              <b>{hits.length} 项</b>
+              <span>·</span>
+              <span>
+                {settings.sortMode === 'recent'
+                  ? '按修改时间'
+                  : settings.sortMode === 'name'
+                    ? '按名称'
+                    : settings.sortMode === 'size'
+                      ? '按大小'
+                      : '按相关度'}
+              </span>
             </span>
           </div>)}
 

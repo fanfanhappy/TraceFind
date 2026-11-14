@@ -1,4 +1,4 @@
-﻿/* ==========================================================================
+/* ==========================================================================
    AURA Search · App Layout
    模块一 02｜主窗口布局与尺寸
    ========================================================================== */
@@ -294,15 +294,18 @@ kbd {
 }
 
 .result {
-  display: flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 148px;
   align-items: center;
   gap: var(--space-3);
-  min-height: 54px;
-  padding: 6px 10px;
+  min-height: 50px;
+  padding: 5px 10px;
   border: 1px solid transparent;
   border-radius: var(--radius-item);
   cursor: default;
   text-align: left;
+  overflow: hidden;
 }
 
 .result:hover {
@@ -311,8 +314,8 @@ kbd {
 
 /* 选中行：低饱和蓝紫背景 + 细边框，无霓虹光效 */
 .result[aria-selected="true"] {
-  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
-  background: var(--accent-10);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .result__icon {
@@ -388,19 +391,30 @@ kbd {
 
 .result__meta {
   display: flex;
-  flex: 0 0 auto;
   align-items: center;
-  gap: var(--space-3);
+  justify-content: flex-end;
+  gap: 10px;
+  width: 148px;
   color: var(--text-subtle);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-/* 选中行才显示操作提示，避免列表噪音（不占位，避免右侧信息错位） */
+/* 操作提示浮在右侧，不参与布局：选中时不会把文件名挤走 */
 .result__action {
-  display: none;
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  display: flex;
   align-items: center;
   gap: 5px;
+  padding-left: 26px;
+  background: linear-gradient(90deg, transparent, var(--panel) 26%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
 }
 
 /* 预览打开时列表变窄：操作提示让位给文件名 */
@@ -409,19 +423,17 @@ kbd {
 }
 
 .result[aria-selected="true"] .result__action {
-  display: flex;
-}
-
-.result[aria-selected="true"] .result__time {
-  display: none;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* 命中高亮：只做底色加重与字重，不用荧光色 */
 mark {
   padding: 0 1px;
   border-radius: 3px;
-  background: var(--accent-28);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--text);
+  font-weight: 600;
 }
 
 /* 空状态 / 无结果 */
@@ -564,7 +576,7 @@ button.pill:hover {
   display: flex;
   grid-column: 2 / 3;
   grid-row: 2 / 3;
-  width: 384px;
+  width: 320px;
   flex-direction: column;
   margin-bottom: 10px;
   border: 1px solid var(--border);
@@ -1110,11 +1122,13 @@ button.pill:hover {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 18px 10px;
-  flex-wrap: wrap;
+  padding: 0 var(--gutter) 8px;
+  flex-wrap: nowrap;
 }
 
 .filters .chip {
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-size: 12px;
   padding: 4px 10px;
   border-radius: 999px;
@@ -1136,9 +1150,9 @@ button.pill:hover {
 }
 
 .filters__hint {
-  margin-left: auto;
   font-size: 11px;
   color: var(--text-tertiary);
+  white-space: nowrap;
 }
 /* 代码预览的轻量语法高亮 */
 .preview__text--code .tok--comment { color: #7d8799; font-style: italic; }
@@ -1286,4 +1300,42 @@ button.pill:hover {
   font-family: 'Cascadia Code', Consolas, monospace;
   font-size: 12.5px; padding: 1px 5px; border-radius: 5px;
   background: rgba(255,255,255,0.07); color: var(--mint, #b8f2d8);
+}
+/* 筛选行右侧的计数与排序：与列表头合并成一行 */
+.filters__label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.filters__meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.filters__meta b {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 预览：代码需要更宽；文档窄一点，给列表留位置 */
+.preview {
+  width: 320px;
+}
+
+.preview[data-code="true"] {
+  width: 384px;
+}
+
+.preview__text {
+  line-height: 1.85;
+}
+
+.preview__text--code {
+  line-height: 1.55;
 }

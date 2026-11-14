@@ -1,4 +1,4 @@
-﻿import { ArrowDown, ArrowUp, CornerDownLeft, Folder, Space, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, CornerDownLeft, Folder, Space, X } from 'lucide-react'
 import type { IndexStatus } from '../lib/bridge'
 
 interface Props {
@@ -29,11 +29,11 @@ function indexLabel(index: IndexStatus): string {
     case 'paused':
       return '索引已暂停'
     case 'ready':
-      return `索引 ${compactCount(index.files)}`
+      return `${compactCount(index.files)} 文件`
     case 'demo':
       return '演示数据'
     default:
-      return index.files > 0 ? `索引 ${compactCount(index.files)}` : '未索引'
+      return index.files > 0 ? `${compactCount(index.files)} 文件` : '未索引'
   }
 }
 
@@ -101,7 +101,7 @@ export function StatusBar({
       </div>
 
       <div className="statusbar__trail">
-        <span role="status">{status ?? (query ? `${total} 个结果` : '最近使用')}</span>
+        {status && <span role="status">{status}</span>}
         {desktop && hotkeyFallback && (
           <button
             type="button"
@@ -135,7 +135,7 @@ export function StatusBar({
           {indexLabel(index)}
         </span>
         <span title={`全局快捷键 ${hotkey}`}>{hotkey}</span>
-        {query && <span>{total}</span>}
+
       </div>
     </footer>
   )
