@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>TraceFind vs Everything</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #171a21;
+        --panel-2: #1c2029;
+        --line: rgba(255, 255, 255, 0.08);
+        --text: #eef1f6;
+        --muted: #9aa3b2;
+        --dim: #6f7787;
+        --mint: #b8f2d8;
+        --mint-dim: rgba(184, 242, 216, 0.14);
+        --amber: #f0c674;
+        --grey: #5a6270;
+      }
+
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+
+      body {
+        width: 1600px;
+        height: 1000px;
+        background:
+          radial-gradient(900px 520px at 82% -12%, rgba(184, 242, 216, 0.13), transparent 62%),
+          radial-gradient(700px 420px at 6% 108%, rgba(120, 160, 255, 0.10), transparent 60%),
+          var(--bg);
+        font-family: 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+        color: var(--text);
+        overflow: hidden;
+      }
+
+      .page { padding: 54px 64px 46px; height: 100%; display: flex; flex-direction: column; }
+
+      /* ---------- 头部 ---------- */
+      .head { display: flex; align-items: flex-start; justify-content: space-between; }
+      .brand { display: flex; align-items: center; gap: 14px; }
+      .mark {
+        width: 46px; height: 46px; border-radius: 12px;
+        background: linear-gradient(160deg, #1e2430, #141821);
+        border: 1px solid rgba(184, 242, 216, 0.28);
+        display: flex; align-items: center; justify-content: center;
+        color: var(--mint);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255,255,255,0.05);
+      }
+      .brand h1 { font-size: 27px; letter-spacing: 0.2px; font-weight: 700; }
+      .brand .sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; letter-spacing: 0.3px; }
+      .head .right { text-align: right; }
+      .head .right .k { font-size: 11.5px; color: var(--dim); letter-spacing: 1.4px; }
+      .head .right .v { font-size: 13px; color: var(--muted); margin-top: 6px; }
+
+      /* ---------- 标题区 ---------- */
+      .hero { margin-top: 26px; }
+      .hero h2 { font-size: 44px; line-height: 1.18; letter-spacing: 0.4px; font-weight: 800; }
+      .hero h2 em { font-style: normal; color: var(--mint); }
+      .hero p { margin-top: 12px; font-size: 15px; color: var(--muted); letter-spacing: 0.2px; }
+
+      /* ---------- 表格 ---------- */
+      .table {
+        margin-top: 26px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        overflow: hidden;
+        background: linear-gradient(180deg, rgba(255,255,255,0.022), rgba(255,255,255,0.008));
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .row { display: grid; grid-template-columns: 1fr 250px 250px; align-items: stretch; flex: 1; min-height: 54px; }
+      .row + .row { border-top: 1px solid var(--line); }
+
+      .cell { padding: 0 22px; display: flex; align-items: center; }
+      .row.head-row { background: rgba(0, 0, 0, 0.22); }
+      .row.head-row { flex: 0 0 64px; }
+
+      .feature { gap: 12px; }
+      .feature .name { font-size: 14.5px; font-weight: 600; }
+      .feature .desc { font-size: 11.5px; color: var(--dim); margin-top: 3px; }
+      .feature .txt { display: flex; flex-direction: column; }
+
+      .col-head { justify-content: center; flex-direction: column; gap: 2px; }
+      .col-head .t { font-size: 14px; font-weight: 700; letter-spacing: 0.3px; }
+      .col-head .s { font-size: 10.5px; color: var(--dim); letter-spacing: 0.6px; }
+      .col-head.trace { background: var(--mint-dim); border-left: 1px solid rgba(184,242,216,0.18); }
+      .col-head.trace .t { color: var(--mint); }
+
+      .cell.mark-cell { justify-content: center; }
+      .cell.mark-cell.trace { background: rgba(184, 242, 216, 0.05); border-left: 1px solid rgba(184,242,216,0.14); }
+
+      .yes, .no, .part, .best {
+        display: inline-flex; align-items: center; gap: 8px;
+        font-size: 13px; font-weight: 600;
+      }
+      .yes { color: var(--mint); }
+      .best { color: var(--amber); }
+      .part { color: var(--muted); }
+      .no { color: var(--grey); }
+      .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.9; }
+
+      /* ---------- 底部 ---------- */
+      .foot { margin-top: 22px; display: flex; align-items: center; justify-content: space-between; }
+      .stats { display: flex; gap: 34px; }
+      .stat .v { font-size: 21px; font-weight: 700; color: var(--text); }
+      .stat .v span { font-size: 11.5px; font-weight: 600; color: var(--muted); margin-left: 3px; }
+      .stat .k { font-size: 10.5px; color: var(--dim); margin-top: 4px; letter-spacing: 0.5px; }
+      .note { font-size: 10.5px; color: var(--dim); max-width: 470px; line-height: 1.65; text-align: right; }
+      .note b { color: var(--muted); font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="head">
+        <div class="brand">
+          <div class="mark">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.2c.6 0 1.1.3 1.5.8l.9 1.2h7.4A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />
+              <path d="M9 11.6v-1a1 1 0 0 1 1-1h1" />
+              <path d="M15 11.6v-1a1 1 0 0 0-1-1h-1" />
+              <path d="M9 14.4v1a1 1 0 0 0 1 1h1" />
+              <path d="M15 14.4v1a1 1 0 0 1-1 1h-1" />
+              <circle cx="12" cy="13" r="0.9" fill="currentColor" stroke="none" />
+            </svg>
+          </div>
+          <div>
+            <h1>TraceFind</h1>
+            <div class="sub">Windows 本地文件搜索 · 单 exe · 44 MB</div>
+          </div>
+        </div>
+        <div class="right">
+          <div class="k">COMPARISON</div>
+          <div class="v">TraceFind 1.1.0 &nbsp;vs&nbsp; Everything 1.4</div>
+        </div>
+      </div>
+
+      <div class="hero">
+        <h2>Everything 找<b>名字</b>，TraceFind 找<b>内容</b></h2>
+        <p>文件名之上，再叠正文、图片 OCR、语义理解与即时预览 —— 同一个入口，问法不必精确。</p>
+      </div>
+
+      <div class="table">
+        <div class="row head-row">
+          <div class="cell col-head"><span class="t">能力</span><span class="s">默认配置下的实际体验</span></div>
+          <div class="cell col-head"><span class="t">Everything</span><span class="s">文件名索引</span></div>
+          <div class="cell col-head trace"><span class="t">TraceFind</span><span class="s">文件名 + 内容 + 语义</span></div>
+        </div>
+
+        <div class="row">
+          <div class="cell feature">
+            <div class="txt"><span class="name">文件名秒搜</span><span class="desc">按名字、通配符、正则定位文件</span></div>
+          </div>
+          <div class="cell mark-cell"><span class="best"><i class="dot"></i>极致（MFT 索引）</span></div>
+          <div class="cell mark-cell trace"><span class="yes"><i class="dot"></i>P50 27 ms</span></div>
+        </div>
+
+        <div class="row">
+          <div class="cell feature">
+            <div class="txt"><span class="name">中文拼音 / 首字母</span><span class="desc">打 cwbg 命中「财务预算报告」</span></div>
+          </div>
+          <div class="cell mark-cell"><span class="no"><i class="dot"></i>需拼音插件</span></div>
+          <div class="cell mark-cell trace"><span class="yes"><i class="dot"></i>内置全拼 + 首字母</span></div>
+        </div>
+
+        <div class="row">
+          <div class="cell feature">
+            <div class="txt"><span class="name">正文全文检索</span><span class="desc">Word / PPT / Excel / PDF / 代码 / Markdown</span></div>
+          </div>
+          <div class="cell mark-cell"><span class="part">仅文件名</span></div>
+          <div class="cell mark-cell trace"><span class="yes"><i class="dot"></i>FTS5 全文索引</span></div>
+        </div>
+
+        <div class="row">
+          <div class="cell feature">
+            <div class="txt"><span class="name">图片 / 扫描件 OCR</span><span class="desc">截图、扫描版 PDF 里的文字也能搜</span></div>
+          </div>
+          <div class="cell mark-cell"><span class="part">需外部工具</span></div>
+          <div class="cell mark-cell trace"><span class="yes"><i class="dot"></i>系统 OCR，零模型</span></div>
+        </div>
+
+        <div class="row">
+          <div class="cell feature">
+            <div class="txt"><span class="name">语义检索</span><span class="desc">问法与原文不一致也能召回</span></div>
+          </div>
+          <div class="cell mark-cell"><span class="no"><i class="dot"></i>不支持</span></div>
+          <div class="cell mark-cell trace"><span class="yes"><i class="dot"></i>本地模型 / 云端可选</span></div>
+        </div>
+
+        <div class="row">
+          <div class="cell feature">
+            <div class="txt"><span class="name">内置预览</span><span class="desc">不打开程序先看内容，代码高亮</span></div>
+          </div>
+          <div class="cell mark-cell"><span class="part">基础</span></div>
+          <div class="cell mark-cell trace"><span class="yes"><i class="dot"></i>分页 + 命中定位</span></div>
+        </div>
+
+        <div class="row">
+          <div class="cell feature">
+            <div class="txt"><span class="name">AI 问答</span><span class="desc">对检索到的正文片段提问，带引用</span></div>
+          </div>
+          <div class="cell mark-cell"><span class="no"><i class="dot"></i>不支持</span></div>
+          <div class="cell mark-cell trace"><span class="yes"><i class="dot"></i>检索增强问答</span></div>
+        </div>
+
+        <div class="row">
+          <div class="cell feature">
+            <div class="txt"><span class="name">首次可用成本</span><span class="desc">装完多久能搜</span></div>
+          </div>
+          <div class="cell mark-cell"><span class="best"><i class="dot"></i>极低（读 MFT）</span></div>
+          <div class="cell mark-cell trace"><span class="part">扫描 0.45 s；正文索引在后台</span></div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <div class="stats">
+          <div class="stat"><div class="v">118<span>ms</span></div><div class="k">冷启动到可交互</div></div>
+          <div class="stat"><div class="v">18<span>ms</span></div><div class="k">热键唤起居中 P50</div></div>
+          <div class="stat"><div class="v">27<span>ms</span></div><div class="k">搜索 P50（1.46 万文件）</div></div>
+          <div class="stat"><div class="v">0<span>KB</span></div><div class="k">OCR 模型体积</div></div>
+        </div>
+        <div class="note">
+          <b>对比口径：</b>Everything 1.4 默认配置（仅文件名索引）；TraceFind 1.1.0 全功能开启。<br />
+          Everything 的文件名搜索仍是同类最快，这里不是速度竞赛 —— 差异在<b>能搜到什么</b>。
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
