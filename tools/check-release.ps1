@@ -102,10 +102,25 @@ if (-not $token) {
 
         if ($VerifyDownload -and $shaDetail) {
             $tmp = Join-Path $env:TEMP "tf-check-$Version.zip"
+            $remote = ''
+            $downloaded = $false
             try {
-                curl.exe -s -L --max-time 300 -o $tmp "https://github.com/$repo/releases/download/$tag/TraceFind-$Version-win64.zip"
-                $remote = (Get-FileHash $tmp -Algorithm SHA256).Hash.ToUpper()
-                Check '远端 zip 与本地一致' ($remote -eq $shaDetail) $remote.Substring(0, 16)
+                # 网络不稳时 curl 可能只下到一半，必须按体积确认完整再比对哈希
+                for ($attempt = 1; $attempt -le 3 -and -not $downloaded; $attempt++) {
+                    Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+                    curl.exe -s -L --retry 3 --retry-delay 2 --max-time 600 -o $tmp "https://github.com/$repo/releases/download/$tag/TraceFind-$Version-win64.zip" | Out-Null
+                    if ((Test-Path $tmp) -and ((Get-Item $tmp).Length -eq (Get-Item $zip).Length)) {
+                        $downloaded = $true
+                    } else {
+                        Start-Sleep -Seconds 2
+                    }
+                }
+                if ($downloaded) {
+                    $remote = (Get-FileHash $tmp -Algorithm SHA256).Hash.ToUpper()
+                    Check '远端 zip 与本地一致' ($remote -eq $shaDetail) $remote.Substring(0, 16)
+                } else {
+                    Check '远端 zip 与本地一致' $false '下载不完整（已重试 3 次）'
+                }
             } catch {
                 Check '远端 zip 与本地一致' $false '下载失败'
             } finally {
