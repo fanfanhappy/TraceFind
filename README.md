@@ -187,6 +187,7 @@ pnpm dev
 - [开发、构建与打包](docs/DEVELOPMENT.md)
 - [TraceFind 2.0.0 发布说明](docs/release-2.0.0.md)
 - [贡献与截图规范](docs/contributing.md)
+- [发布流程与验收清单](docs/releasing.md)
 - [历史变更](docs/changelog-0.6.0.md)
 - [反馈问题](https://github.com/fanfanhappy/TraceFind/issues)
 
