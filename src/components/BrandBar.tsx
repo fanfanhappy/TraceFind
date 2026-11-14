@@ -5,13 +5,14 @@ import { startDrag } from '../lib/bridge'
 interface Props {
   pinned: boolean
   desktop: boolean
+  closeToTray: boolean
   onTogglePin: () => void
   onOpenSettings: () => void
   onClose: () => void
 }
 
 /** 02｜顶部品牌栏：48px，控制项保持低视觉权重 */
-export function BrandBar({ pinned, desktop, onTogglePin, onOpenSettings, onClose }: Props) {
+export function BrandBar({ pinned, desktop, closeToTray, onTogglePin, onOpenSettings, onClose }: Props) {
   return (
     <header
       className="brandbar"
@@ -50,8 +51,8 @@ export function BrandBar({ pinned, desktop, onTogglePin, onOpenSettings, onClose
         <button
           type="button"
           className="iconbtn iconbtn--danger interactive"
-          title={desktop ? '隐藏窗口（保留托盘）' : '关闭预览'}
-          aria-label="隐藏窗口"
+          title={desktop && !closeToTray ? '退出 TraceFind' : '关闭窗口'}
+          aria-label={desktop && !closeToTray ? '退出 TraceFind' : '关闭窗口'}
           onClick={onClose}
         >
           <X size={17} strokeWidth={1.75} />

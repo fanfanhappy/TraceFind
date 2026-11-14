@@ -250,10 +250,24 @@ export function Settings() {
     setInfo((current) => (current ? { ...current, hotkey: accel, hotkeyActive: true } : current))
   }
 
-  /** 返回搜索：先唤起主窗口再关设置，避免中间出现"两个窗口都不在"的空档 */
+  /** 返回搜索：设置窗先淡出，主窗口可交互后再隐藏自己；减少动效时直接切 */
   async function backToSearch() {
+    const reduce =
+      settings.reducedMotion ||
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ||
+      document.documentElement.dataset.motion === 'reduced'
+    const root = document.documentElement
+    if (!reduce) {
+      root.dataset.leaving = 'true'
+      await new Promise((resolve) => window.setTimeout(resolve, 110))
+    }
     await showLauncher()
+    if (!reduce) {
+      // 等主窗口淡入结束（160ms）再藏设置，避免两边同时动
+      await new Promise((resolve) => window.setTimeout(resolve, 170))
+    }
     await closeSettingsWindow()
+    delete root.dataset.leaving
   }
 
   useEffect(() => {
@@ -324,7 +338,7 @@ export function Settings() {
                 <div className="setting-row">
                   <span className="setting-row__text">
                     <span className="setting-row__title">关闭时隐藏到托盘</span>
-                    <span className="setting-row__desc">关闭按钮不退出进程；只有托盘菜单的「退出」才会结束应用。</span>
+                    <span className="setting-row__desc">开启时关闭主窗口会保留后台运行；关闭此选项后，关闭主窗口即退出。</span>
                   </span>
                   <Switch
                     label="关闭时隐藏到托盘"

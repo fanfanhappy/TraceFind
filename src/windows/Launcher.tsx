@@ -17,6 +17,7 @@ import {
   getIndexStatus,
   getRuntimeInfo,
   hideLauncher,
+  quitApp,
   isDesktop,
   loadSettings,
   notifyAnimationFinished,
@@ -134,12 +135,12 @@ export function Launcher() {
       }
       if (isDesktop) await setWindowDark(resolveDark(loaded.theme))
 
-      const status = await getIndexStatus()
-      if (!alive) return
-      setIndex(status)
+      // 先把窗口放出来（主题与材质已就绪），索引统计随后异步补，不挡首帧
       setReady(true)
-
       if (isDesktop) await frontendReady()
+      void getIndexStatus().then((status) => {
+        if (alive) setIndex(status)
+      })
     })()
     return () => {
       alive = false
@@ -349,9 +350,10 @@ export function Launcher() {
     [],
   )
 
-  /* 动画兜底：animationend 未触发时也要收敛状态 */
+  /* 动画兜底：animationend 未触发时也要收敛状态；减少动效时立即收敛 */
   useEffect(() => {
     if (phase !== 'showing' && phase !== 'hiding') return
+    const wait = settings.reducedMotion ? 0 : phase === 'showing' ? 320 : 260
     const timer = window.setTimeout(() => {
       if (phaseRef.current !== phase) return
       if (phase === 'showing') {
@@ -361,9 +363,9 @@ export function Launcher() {
         setPhase('hidden')
         void notifyAnimationFinished('hide')
       }
-    }, phase === 'showing' ? 320 : 260)
+    }, wait)
     return () => window.clearTimeout(timer)
-  }, [phase])
+  }, [phase, settings.reducedMotion])
 
   function onAnimationEnd(event: ReactAnimationEvent<HTMLElement>) {
     if (event.target !== event.currentTarget) return
@@ -578,7 +580,11 @@ export function Launcher() {
         desktop={isDesktop}
         onTogglePin={() => void togglePin()}
         onOpenSettings={() => void openSettingsWindow()}
-        onClose={hide}
+        closeToTray={settings.closeToTray}
+        onClose={() => {
+          if (isDesktop && !settings.closeToTray) void quitApp()
+          else hide()
+        }}
       />
 
       <section className="workspace">

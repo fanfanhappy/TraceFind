@@ -473,6 +473,14 @@ pub fn show_launcher<R: Runtime>(app: AppHandle<R>) {
     lifecycle::show(&app);
 }
 
+pub fn close_launcher<R: Runtime>(app: &AppHandle<R>) {
+    if app.state::<AppState>().settings_snapshot().close_to_tray {
+        lifecycle::hide(app);
+    } else {
+        quit(app);
+    }
+}
+
 #[tauri::command]
 pub fn hide_launcher<R: Runtime>(app: AppHandle<R>) {
     lifecycle::hide(&app);

@@ -294,7 +294,7 @@ fn main() {
                 // 主窗口的关闭按钮 = 隐藏到托盘，进程继续常驻
                 if window.label() == "main" {
                     api.prevent_close();
-                    lifecycle::hide(window.app_handle());
+                    commands::close_launcher(window.app_handle());
                 }
             }
             tauri::WindowEvent::Focused(false) => {

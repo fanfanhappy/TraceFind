@@ -36,7 +36,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let paused = state.scan_paused.load(Ordering::SeqCst);
     let pause_label = if paused { "继续索引" } else { "暂停索引" };
     let pause = MenuItem::with_id(app, "pause", pause_label, scanning, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "退出 AURA Search", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "退出 TraceFind", true, None::<&str>)?;
 
     MenuBuilder::new(app)
         .item(&show)

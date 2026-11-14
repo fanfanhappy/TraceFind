@@ -76,7 +76,7 @@
   --statusbar-h: 44px;
 
   /* 动效：唤起 160–200ms，隐藏 100–140ms */
-  --dur-show: 180ms;
+  --dur-show: 160ms;
   --dur-hide: 120ms;
   --dur-hover: 130ms;
   --dur-panel: 200ms;

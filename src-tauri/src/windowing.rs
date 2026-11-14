@@ -1,5 +1,6 @@
 //! 窗口位置与设置窗口：不写死屏幕坐标，始终围绕“光标所在显示器”计算。
 
+use std::sync::Mutex;
 use tauri::{Manager, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 const LAUNCHER_WIDTH: f64 = 800.0;
@@ -57,24 +58,32 @@ pub fn place_on_cursor_monitor<R: Runtime>(window: &WebviewWindow<R>) {
     let _ = window.set_position(PhysicalPosition::new(x, y));
 }
 
-/// 设置窗口是独立窗口：存在则前置，不存在则按需创建。
+/// 设置窗口是独立窗口：存在则复用，不存在则按需创建。
 pub fn ensure_settings<R: Runtime>(app: &tauri::AppHandle<R>) {
+    // 连点"设置"时只允许一个创建流程
+    static CREATING: Mutex<()> = Mutex::new(());
+    let _guard = CREATING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+
     if let Some(window) = app.get_webview_window("settings") {
-        let _ = window.show();
+        // 复用已有窗口：可见时只聚焦，隐藏时直接显示（页面不重载）
+        if !window.is_visible().unwrap_or(false) {
+            let _ = window.show();
+        }
         let _ = window.set_focus();
         return;
     }
 
     let builder = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
-    .title("TraceFind · 设置")
-    .inner_size(900.0, 620.0)
-    .min_inner_size(780.0, 540.0)
-    .center()
-    .decorations(false)
-    .transparent(true)
-    .shadow(true)
-    .skip_taskbar(false)
-    .visible(true);
+        .title("TraceFind · 设置")
+        .inner_size(900.0, 620.0)
+        .min_inner_size(780.0, 540.0)
+        .center()
+        .decorations(false)
+        .transparent(true)
+        .shadow(true)
+        .skip_taskbar(false)
+        // 先隐藏创建，套好材质再显示，避免"先亮后暗"闪一下
+        .visible(false);
 
     match builder.build() {
         Ok(window) => {
@@ -84,14 +93,16 @@ pub fn ensure_settings<R: Runtime>(app: &tauri::AppHandle<R>) {
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             let _ = crate::material::apply(&window, dark);
+            let _ = window.show();
             let _ = window.set_focus();
         }
         Err(err) => crate::aura_log!("设置窗口创建失败：{err}"),
     }
 }
 
+/// 关闭设置：只隐藏，窗口留着复用（下次打开不用重新加载页面）
 pub fn close_settings<R: Runtime>(app: &tauri::AppHandle<R>) {
     if let Some(window) = app.get_webview_window("settings") {
-        let _ = window.close();
+        let _ = window.hide();
     }
 }

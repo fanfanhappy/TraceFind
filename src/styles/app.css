@@ -1671,3 +1671,20 @@ button.pill:hover {
   background: var(--floating);
   color: var(--text);
 }
+/* 设置 → 搜索：设置窗先轻轻淡出，主窗口接管后由 JS 隐藏 */
+.settings-app {
+  transition: opacity 110ms ease, transform 110ms ease;
+}
+
+html[data-leaving="true"] .settings-app {
+  opacity: 0;
+  transform: translateY(2px);
+}
+/* Keep the settings navigation legible against the window material. */
+.settings-nav {
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+}
+
+.settings-nav .navitem[aria-current="page"] {
+  background: color-mix(in srgb, var(--accent) 13%, var(--panel));
+}

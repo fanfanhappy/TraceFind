@@ -19,6 +19,10 @@ pub fn show<R: Runtime>(app: &AppHandle<R>) {
         return;
     };
 
+    if window.is_minimized().unwrap_or(false) {
+        let _ = window.unminimize();
+    }
+
     match state.phase() {
         Phase::Hidden => {
             crate::aura_log!("唤起：开始定位并显示窗口");
@@ -51,6 +55,16 @@ pub fn hide<R: Runtime>(app: &AppHandle<R>) {
         _ => {}
     }
 
+    if app.tray_by_id(crate::tray_manager::TRAY_ID).is_none()
+        && !crate::hotkey_manager::is_registered(app)
+    {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.set_skip_taskbar(false);
+            let _ = window.minimize();
+        }
+        return;
+    }
+
     state.set_phase(Phase::Hiding);
     let _ = app.emit("launcher:hide", ());
 
@@ -73,6 +87,10 @@ pub fn finish_hide<R: Runtime>(app: &AppHandle<R>) {
 }
 
 pub fn toggle<R: Runtime>(app: &AppHandle<R>) {
+    if app.get_webview_window("main").is_some_and(|window| window.is_minimized().unwrap_or(false)) {
+        show(app);
+        return;
+    }
     match app.state::<AppState>().phase() {
         Phase::Hidden | Phase::Hiding => show(app),
         _ => hide(app),
