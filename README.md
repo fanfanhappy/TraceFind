@@ -70,6 +70,14 @@
     <td width="50%"><img src="docs/screens/06-settings-search.png" alt="搜索与排序"><br /><sub>搜索与排序：相关度 / 时间 / 名称 / 大小</sub></td>
     <td width="50%"><img src="docs/screens/07-settings-ai.png" alt="AI 与模型"><br /><sub>AI 与模型：本地模型或云端接口</sub></td>
   </tr>
+  <tr>
+    <td width="50%"><img src="docs/screens/10-no-results.png" alt="无结果引导"><br /><sub>无结果：按已知状态给出下一步</sub></td>
+    <td width="50%"><img src="docs/screens/11-source-tag.png" alt="来源标签"><br /><sub>来源标签：正文 / OCR / 语义，说明为什么被找到</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screens/12-ocr-tag.png" alt="OCR 命中"><br /><sub>图片里的文字也能搜到，并标明来自 OCR</sub></td>
+    <td width="50%"></td>
+  </tr>
 </table>
 
 ## AI 问答
