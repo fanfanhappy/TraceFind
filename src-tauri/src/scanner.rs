@@ -1,4 +1,4 @@
-﻿//! 目录扫描：把文件系统里的名字/路径/大小/时间写进索引。
+//! 目录扫描：把文件系统里的名字/路径/大小/时间写进索引。
 //!
 //! 设计取舍：
 //! - 单线程顺序遍历 + 批量事务，避免大量小事务把磁盘打满；
@@ -99,7 +99,6 @@ pub fn spawn<R: Runtime>(app: AppHandle<R>, options: ScanOptions) -> bool {
         let state = app.state::<AppState>();
         state.scan_running.store(false, Ordering::SeqCst);
         state.scan_paused.store(false, Ordering::SeqCst);
-        let _ = crate::tray_manager::refresh(&app);
 
         let mut status = state
             .index_status
@@ -131,6 +130,8 @@ pub fn spawn<R: Runtime>(app: AppHandle<R>, options: ScanOptions) -> bool {
             }
         }
         drop(status);
+        // 统计写好之后再刷新托盘，提示里的文件数才是最新的
+        let _ = crate::tray_manager::refresh(&app);
         maybe_rescan(&app);
     });
 

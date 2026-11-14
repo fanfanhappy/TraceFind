@@ -28,6 +28,8 @@ import {
   onHotkeyRegistered,
   onIndexChanged,
   onIndexProgress,
+  onTrayStatus,
+  onUpdateAvailable,
   onLauncherFocus,
   onLauncherHide,
   onLauncherShow,
@@ -271,6 +273,17 @@ export function Launcher() {
   useEffect(() => {
     hitsRef.current = hits
   }, [hits])
+
+  // 托盘里点"检查更新"的结果
+  useEffect(
+    () =>
+      onUpdateAvailable((payload) => {
+        setUpdate({ latest: payload.latest, url: payload.url })
+      }),
+    [],
+  )
+
+  useEffect(() => onTrayStatus((text) => setStatus(text)), [])
 
   // 启动时检查更新：默认 24 小时一次，可在设置里关掉
   useEffect(() => {

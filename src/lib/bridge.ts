@@ -271,6 +271,30 @@ export function onUpdateProgress(cb: (payload: UpdateProgress) => void): () => v
   return () => unlisten?.()
 }
 
+export interface UpdateAvailable {
+  latest: string
+  url: string
+  sha256: string
+}
+
+/** 托盘里"检查更新"发现新版本时触发 */
+export function onUpdateAvailable(cb: (payload: UpdateAvailable) => void): () => void {
+  let unlisten: (() => void) | undefined
+  void listen<UpdateAvailable>('aura:update-available', (event) => cb(event.payload)).then((fn) => {
+    unlisten = fn
+  })
+  return () => unlisten?.()
+}
+
+/** 托盘操作的结果提示（例如"已是最新版本"） */
+export function onTrayStatus(cb: (text: string) => void): () => void {
+  let unlisten: (() => void) | undefined
+  void listen<string>('aura:tray-status', (event) => cb(event.payload)).then((fn) => {
+    unlisten = fn
+  })
+  return () => unlisten?.()
+}
+
 /** 打开本项目 GitHub 页面（后端会再次校验域名） */
 export async function openUrl(url: string): Promise<void> {
   await invoke('open_url', { url })
