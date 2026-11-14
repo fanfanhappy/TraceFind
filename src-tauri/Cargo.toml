@@ -1,6 +1,6 @@
 [package]
 name = "tracefind"
-version = "2.7.0"
+version = "2.8.0"
 description = "TraceFind · Windows 本地文件搜索"
 authors = ["TraceFind"]
 license = "MIT"

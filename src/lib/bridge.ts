@@ -225,7 +225,10 @@ export interface UpdateStatus {
   available: boolean
   current: string
   latest: string
+  /** 发布页地址（查看下载用） */
   url: string
+  /** zip 资产直链（下载并安装用） */
+  assetUrl: string
   notes: string
   publishedAt: number
   sizeBytes: number
@@ -242,6 +245,7 @@ export async function checkUpdate(record = true): Promise<UpdateStatus> {
       current: 'dev',
       latest: '',
       url: '',
+      assetUrl: '',
       notes: '',
       publishedAt: 0,
       sizeBytes: 0,

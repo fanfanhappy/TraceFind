@@ -93,6 +93,10 @@ src-tauri/tauri.conf.json  "version": "2.0.0"
 - Release 资产必须包含 zip，否则一键更新会在下载阶段失败
 - 便携版放在受保护目录时更新会失败——这是设计取舍，失败时保留旧版
 
+### 一键安装的地址必须是资产直链
+
+`html_url` 是发布页（HTML），`browser_download_url` 才是 zip。2.4.0–2.7.0 曾把前者当安装包，导致校验必然失败；现在只接受 `/releases/download/` 前缀，并在下载后校验 `PK` 魔数。
+
 ## 将来接自动更新时
 
 `tauri-plugin-updater` 会让 release 从"新闻"变成分发基础设施：更新检查读的就是 release 资产。届时规则改为：

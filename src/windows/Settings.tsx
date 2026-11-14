@@ -1098,11 +1098,11 @@ export function Settings() {
                           type="button"
                           className="linkbtn linkbtn--primary"
                           title="下载并校验 sha256，然后替换当前程序并重启"
-                          disabled={update.sha256.length !== 64}
+                          disabled={update.sha256.length !== 64 || !update.assetUrl}
                           onClick={() => {
                             setInstallError('')
                             setInstalling({ phase: 'download', pct: 0 })
-                            void installUpdate(update.url, update.sha256)
+                            void installUpdate(update.assetUrl, update.sha256)
                               .then(() => setInstalling({ phase: 'install', pct: 100 }))
                               .catch((err) => {
                                 setInstalling(null)

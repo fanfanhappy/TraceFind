@@ -15,6 +15,8 @@ pub struct UpdateStatus {
     pub current: String,
     pub latest: String,
     pub url: String,
+    /// zip 资产直链（下载并安装用这个，不能用发布页地址）
+    pub asset_url: String,
     pub notes: String,
     pub published_at: i64,
     pub size_bytes: u64,
@@ -84,12 +86,17 @@ pub fn check(current: &str) -> UpdateStatus {
             if let Some((latest, url)) = latest_from_redirect() {
                 // 限流时 API 给不了资产大小与哈希，但 .sha256 地址可以按版本拼出来
                 let sha256 = sha_for_version(&latest);
+                let asset_url = format!(
+                    "https://github.com/{}/releases/download/v{}/TraceFind-{}-win64.zip",
+                    REPO, latest, latest
+                );
                 return UpdateStatus {
                     checked: true,
                     available: is_newer(current, &latest),
                     current: current.to_string(),
                     latest,
                     url,
+                    asset_url,
                     sha256,
                     ..Default::default()
                 };
@@ -148,7 +155,7 @@ pub fn check(current: &str) -> UpdateStatus {
         .and_then(parse_rfc3339)
         .unwrap_or(0);
 
-    let (size_bytes, sha256) = asset_info(&json, &latest);
+    let (size_bytes, sha256, asset_url) = asset_info(&json, &latest);
 
     UpdateStatus {
         checked: true,
@@ -156,6 +163,7 @@ pub fn check(current: &str) -> UpdateStatus {
         current: current.to_string(),
         latest,
         url: html_url,
+        asset_url,
         notes,
         published_at,
         size_bytes,
@@ -211,11 +219,12 @@ fn sha_for_version(version: &str) -> String {
 }
 
 /// 从资产里找 zip 的下载大小与 .sha256 内容
-fn asset_info(json: &serde_json::Value, version: &str) -> (u64, String) {
+fn asset_info(json: &serde_json::Value, version: &str) -> (u64, String, String) {
     let mut size = 0;
     let mut sha = String::new();
+    let mut download = String::new();
     let Some(assets) = json.get("assets").and_then(|value| value.as_array()) else {
-        return (0, sha);
+        return (0, sha, download);
     };
     for asset in assets {
         let name = asset.get("name").and_then(|value| value.as_str()).unwrap_or_default();
@@ -233,9 +242,14 @@ fn asset_info(json: &serde_json::Value, version: &str) -> (u64, String) {
             }
         } else if name.ends_with(".zip") && name.contains(version) {
             size = asset.get("size").and_then(|value| value.as_u64()).unwrap_or(0);
+            download = asset
+                .get("browser_download_url")
+                .and_then(|value| value.as_str())
+                .unwrap_or_default()
+                .to_string();
         }
     }
-    (size, sha)
+    (size, sha, download)
 }
 
 /// 只解析 GitHub 返回的 "2026-11-14T06:41:17Z"
@@ -286,8 +300,8 @@ where
     use sha2::{Digest, Sha256};
     use std::io::{Read, Write};
 
-    if !url.starts_with("https://github.com/fanfanhappy/TraceFind/releases/") {
-        return Err("更新地址不是本项目的发布页".to_string());
+    if !url.starts_with("https://github.com/fanfanhappy/TraceFind/releases/download/") {
+        return Err("更新地址不是本项目的安装包直链".to_string());
     }
     if sha256.trim().len() != 64 {
         return Err("缺少可校验的 sha256，请手动下载".to_string());
@@ -316,6 +330,7 @@ where
     let mut file = std::fs::File::create(&zip_path).map_err(|err| format!("无法写入临时文件：{err}"))?;
     let mut hasher = Sha256::new();
     let mut downloaded = 0u64;
+    let mut head = Vec::new();
     let mut buffer = vec![0u8; 64 * 1024];
     let mut last_reported = 0u64;
     progress(0, total);
@@ -323,6 +338,9 @@ where
         let read = reader.read(&mut buffer).map_err(|err| format!("下载中断：{err}"))?;
         if read == 0 {
             break;
+        }
+        if head.len() < 4 {
+            head.extend_from_slice(&buffer[..read.min(4)]);
         }
         file.write_all(&buffer[..read])
             .map_err(|err| format!("写入失败：{err}"))?;
@@ -334,6 +352,12 @@ where
         }
     }
     drop(file);
+
+    // 第一段不是 PK，说明拿到的是网页而不是 zip（旧版本就踩过这个坑）
+    if head != b"PK\x03\x04" {
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err("下载到的不是安装包（可能打开了发布页），请改用「查看下载」手动更新".to_string());
+    }
 
     let digest = format!("{:x}", hasher.finalize());
     if !digest.eq_ignore_ascii_case(sha256.trim()) {
@@ -471,6 +495,21 @@ mod tests {
             sha.is_empty() || (sha.len() == 64 && sha.starts_with("71F6FFF1")),
             "从资产地址取 sha256 失败：{sha}"
         );
+    }
+
+    #[test]
+    fn asset_info_picks_zip() {
+        let json: serde_json::Value = serde_json::from_str(r#"{
+            "assets": [
+                { "name": "TraceFind-2.7.0-win64.zip", "size": 16268104,
+                  "browser_download_url": "https://github.com/fanfanhappy/TraceFind/releases/download/v2.7.0/TraceFind-2.7.0-win64.zip" },
+                { "name": "TraceFind-2.7.0-win64.zip.sha256", "size": 100,
+                  "browser_download_url": "https://example.invalid/sha" }
+            ]
+        }"#).unwrap();
+        let (size, _sha, url) = asset_info(&json, "2.7.0");
+        assert_eq!(size, 16_268_104);
+        assert!(url.ends_with("/TraceFind-2.7.0-win64.zip"), "资产直链不对：{url}");
     }
 
     #[test]
