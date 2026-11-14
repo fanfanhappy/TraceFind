@@ -84,6 +84,8 @@ pub fn restart_onboarding<R: Runtime>(
     };
     let redacted = settings::redacted(current);
     let _ = app.emit("aura:settings-changed", redacted.clone());
+    // 设置窗口若开着会正好盖住主窗口，先关掉再抬出引导
+    crate::windowing::close_settings(&app);
     crate::lifecycle::show(&app);
     Ok(redacted)
 }

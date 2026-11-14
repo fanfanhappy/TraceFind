@@ -996,7 +996,8 @@ export function Settings() {
                     type="button"
                     className="linkbtn"
                     onClick={() => {
-                      void restartOnboarding().then(() => void openSettingsWindow())
+                      // 命令会关掉设置窗口并抬起主窗口里的引导
+                      void restartOnboarding()
                     }}
                   >
                     重新播放

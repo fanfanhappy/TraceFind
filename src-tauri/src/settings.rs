@@ -1,4 +1,4 @@
-﻿use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager, Runtime};
@@ -228,7 +228,10 @@ pub fn load<R: Runtime>(app: &AppHandle<R>) -> AppSettings {
     match fs::read_to_string(&path) {
         Ok(raw) => match serde_json::from_str::<AppSettings>(&raw) {
             Ok(mut settings) => {
-                if !settings.roots.is_empty() {
+                // 只有老配置（从来没写过这个字段）才按"已有目录 = 已完成"推断。
+                // 新配置必须尊重存下来的值，否则"重新观看引导"会被下一次启动抹掉。
+                let legacy = !raw.contains("\"onboardingComplete\"");
+                if legacy && !settings.roots.is_empty() {
                     settings.onboarding_complete = true;
                 }
                 settings
