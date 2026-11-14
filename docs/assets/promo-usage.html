@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>TraceFind 怎么用</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --line: rgba(255, 255, 255, 0.09);
+        --text: #eef1f6;
+        --muted: #9aa3b2;
+        --dim: #6f7787;
+        --mint: #b8f2d8;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        width: 1600px; height: 1140px; overflow: hidden;
+        background:
+          radial-gradient(880px 520px at 88% -8%, rgba(184, 242, 216, 0.13), transparent 62%),
+          radial-gradient(700px 460px at -8% 106%, rgba(120, 160, 255, 0.09), transparent 60%),
+          var(--bg);
+        color: var(--text);
+        font-family: 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+      }
+      .page { padding: 58px 64px 46px; height: 100%; display: flex; flex-direction: column; }
+
+      .head { display: flex; align-items: flex-end; justify-content: space-between; }
+      .title h1 { font-size: 52px; font-weight: 800; letter-spacing: 0.5px; }
+      .title h1 span { color: var(--mint); }
+      .title p { margin-top: 12px; font-size: 17px; color: var(--muted); }
+      .brand { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 15px; }
+      .mark {
+        width: 38px; height: 38px; border-radius: 10px; color: var(--mint);
+        border: 1px solid rgba(184, 242, 216, 0.3);
+        background: linear-gradient(160deg, #1e2430, #141821);
+        display: flex; align-items: center; justify-content: center;
+      }
+
+      .grid { margin-top: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; }
+      .step {
+        border: 1px solid var(--line); border-radius: 18px; overflow: hidden;
+        background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008));
+        display: flex; flex-direction: column;
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+      }
+      .shot {
+        height: 292px; overflow: hidden;
+        background: #141821;
+        border-bottom: 1px solid var(--line);
+      }
+      .shot img { width: 100%; display: block; object-fit: cover; object-position: top center; }
+      .meta { padding: 18px 22px 20px; display: flex; gap: 14px; }
+      .num {
+        flex: 0 0 auto; width: 30px; height: 30px; border-radius: 9px;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(184, 242, 216, 0.12); border: 1px solid rgba(184, 242, 216, 0.28);
+        color: var(--mint); font-size: 15px; font-weight: 700;
+      }
+      .text .t { font-size: 21px; font-weight: 700; }
+      .text .d { margin-top: 6px; font-size: 14px; line-height: 1.6; color: var(--dim); }
+      .text kbd {
+        font-family: 'Cascadia Code', Consolas, monospace;
+        font-size: 13px; padding: 2px 7px; border-radius: 6px;
+        border: 1px solid var(--line); background: rgba(255,255,255,0.06);
+        color: var(--mint);
+      }
+
+      .foot {
+        margin-top: 26px; display: flex; align-items: center; justify-content: space-between;
+        border-top: 1px solid var(--line); padding-top: 22px;
+      }
+      .keys { display: flex; gap: 26px; font-size: 13.5px; color: var(--muted); }
+      .keys b { color: var(--text); font-weight: 650; }
+      .url { font-size: 15px; color: var(--dim); }
+      .url b { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="head">
+        <div class="title">
+          <h1>怎么用 <span>TraceFind</span></h1>
+          <p>四个动作：唤起 → 搜 → 先看 → 直接问</p>
+        </div>
+        <div class="brand">
+          <span class="mark">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.2c.6 0 1.1.3 1.5.8l.9 1.2h7.4A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />
+              <path d="M9 11.6v-1a1 1 0 0 1 1-1h1" />
+              <path d="M15 11.6v-1a1 1 0 0 0-1-1h-1" />
+              <path d="M9 14.4v1a1 1 0 0 0 1 1h1" />
+              <path d="M15 14.4v1a1 1 0 0 1-1 1h-1" />
+              <circle cx="12" cy="13" r="0.95" fill="currentColor" stroke="none" />
+            </svg>
+          </span>
+          Windows · 单 exe
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="step">
+          <div class="shot"><img src="../screens/01-search.png" alt="搜索" /></div>
+          <div class="meta">
+            <div class="num">1</div>
+            <div class="text">
+              <div class="t">唤起，随手输入</div>
+              <div class="d">任意界面按 <kbd>Ctrl + Alt + Space</kbd>。文件名、拼音首字母、正文关键词都能搜，结果按相关度排。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="shot"><img src="../screens/05-filter-code.png" alt="类型筛选" /></div>
+          <div class="meta">
+            <div class="num">2</div>
+            <div class="text">
+              <div class="t">收窄范围</div>
+              <div class="d">点类型筛选（文档 / 图片 / 代码 / 文件夹），或按目录限定；排序可切相关度、时间、名称、大小。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="shot"><img src="../screens/02-preview-docx.png" alt="预览" /></div>
+          <div class="meta">
+            <div class="num">3</div>
+            <div class="text">
+              <div class="t">先看，再决定打开</div>
+              <div class="d"><kbd>Ctrl + Space</kbd> 开预览：文档直接读、代码有语法高亮、图片直接看，命中词会高亮。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="shot"><img src="../screens/08-ai-ask.png" alt="AI 问答" /></div>
+          <div class="meta">
+            <div class="num">4</div>
+            <div class="text">
+              <div class="t">记不住原词？直接问</div>
+              <div class="d"><kbd>Ctrl + Shift + Enter</kbd>：先本地检索资料，再让模型基于这些片段作答，答案带 [n] 引用。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <div class="keys">
+          <span><b>唤醒</b> Ctrl+Alt+Space</span>
+          <span><b>打开</b> Enter</span>
+          <span><b>预览</b> Ctrl+Space</span>
+          <span><b>定位</b> Ctrl+Enter</span>
+          <span><b>问 AI</b> Ctrl+Shift+Enter</span>
+          <span><b>隐藏</b> Esc</span>
+        </div>
+        <div class="url">github.com/<b>fanfanhappy/TraceFind</b></div>
+      </div>
+    </div>
+  </body>
+</html>

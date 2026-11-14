@@ -12,12 +12,16 @@
 
 <p align="center">
   <a href="https://github.com/fanfanhappy/TraceFind/releases">下载 Windows 版</a> ·
-  <a href="docs/release-1.1.0.md">1.1.0 发布说明</a> ·
+  <a href="docs/release-1.1.1.md">1.1.0 发布说明</a> ·
   <a href="docs/DEVELOPMENT.md">开发指南</a> ·
   <a href="docs/DATA-AND-PRIVACY.md">数据与隐私</a>
 </p>
 
 ![TraceFind 搜索窗口](docs/screens/01-search.png)
+
+## 怎么用
+
+<img src="docs/assets/promo-usage.png" alt="四个动作：唤起 → 搜 → 先看 → 直接问">
 
 ## 你还记得什么？
 
@@ -59,7 +63,7 @@
 2. 在 **设置 → 索引与扫描** 查看索引范围，把常用项目目录加进去。首次索引耗时随文件数量、格式和所启用的索引能力而变化。
 3. 输入文件名或正文关键词。需要按大意查找时，在 **设置 → AI 与模型** 开启本地语义检索，首次使用会下载模型。
 
-从 AURA Search 升级时，请先退出旧版，再运行 TraceFind。迁移条件和数据位置见 [1.1.0 发布说明](docs/release-1.1.0.md)。
+从 AURA Search 升级时，请先退出旧版，再运行 TraceFind。迁移条件和数据位置见 [1.1.0 发布说明](docs/release-1.1.1.md)。
 
 ## 常用快捷键
 
@@ -82,7 +86,7 @@ OCR 依赖 Windows 语言能力，扫描版 PDF 当前最多处理前 12 页。O
 ## 项目文档
 
 - [开发、构建与打包](docs/DEVELOPMENT.md)
-- [TraceFind 1.1.0 发布说明](docs/release-1.1.0.md)
+- [TraceFind 1.1.0 发布说明](docs/release-1.1.1.md)
 - [历史变更](docs/changelog-0.6.0.md)
 - [反馈问题](https://github.com/fanfanhappy/TraceFind/issues)
 
