@@ -62,4 +62,4 @@ OCR 依赖 Windows 语言能力，扫描版 PDF 当前最多处理前 12 页。O
 - [历史变更](docs/changelog-0.6.0.md)
 - [反馈问题](https://github.com/fanfanhappy/TraceFind/issues)
 
-仓库当前未声明许可证。
+采用 [MIT 许可证](LICENSE) © 2026 fanfanhappy：可自由使用、修改与分发，保留版权声明即可。
