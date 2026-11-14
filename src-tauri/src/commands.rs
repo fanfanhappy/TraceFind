@@ -1,4 +1,4 @@
-﻿use std::path::PathBuf;
+use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 
 use serde::Serialize;
@@ -542,12 +542,16 @@ pub fn search_files(
 
 
     // 元信息优先取文件名命中；片段优先用语义块，其次正文片段
+    let mut sources: std::collections::HashMap<String, Vec<&'static str>> =
+        std::collections::HashMap::new();
     let mut by_path: std::collections::HashMap<String, FileHit> = std::collections::HashMap::new();
     for hit in filename_hits {
+        sources.entry(hit.path.clone()).or_default().push("name");
         by_path.insert(hit.path.clone(), hit);
     }
     for hit in content_hits {
         let snippet = hit.snippet.clone();
+        sources.entry(hit.path.clone()).or_default().push("content");
         match by_path.get_mut(&hit.path) {
             Some(existing) => {
                 if existing.snippet.is_none() {
@@ -566,9 +570,18 @@ pub fn search_files(
         .filter_map(|(path, hit)| scores.get(&path).map(|score| (*score, hit)))
         .collect();
     merged.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-
-    merged.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
     let mut local_hits: Vec<FileHit> = merged.into_iter().map(|(_, hit)| hit).collect();
+
+    // 统一写入来源（顺序固定：name → content → semantic）
+    for hit in local_hits.iter_mut() {
+        if let Some(list) = sources.get(&hit.path) {
+            for source in ["name", "content"] {
+                if list.contains(&source) {
+                    hit.sources.push(source.to_string());
+                }
+            }
+        }
+    }
 
     match sort {
         index::SortMode::Relevance => {}
@@ -577,6 +590,10 @@ pub fn search_files(
             local_hits.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
         }
         index::SortMode::Size => local_hits.sort_by(|a, b| b.size.cmp(&a.size)),
+    }
+    if sort == index::SortMode::Relevance {
+        let exact_name = query.trim().to_lowercase();
+        local_hits.sort_by_key(|hit| hit.name.to_lowercase() != exact_name);
     }
     local_hits.truncate(limit);
 
@@ -639,6 +656,7 @@ pub fn search_files(
                         continue;
                     }
                     if let Ok(Some(mut hit)) = index::hit_by_path(&conn, &path) {
+                        hit.sources.push("semantic".to_string());
                         if let Some(group) = kind_filter_for_task.as_deref() {
                             if !index::kind_in_group(&hit.kind, group) {
                                 continue;
@@ -1060,7 +1078,12 @@ pub fn ask_files(
 
     let top = limit.unwrap_or(6).clamp(1, 10);
 
-    // 1) 检索：语义优先，再用正文 FTS 补齐（两者都在锁内，很快）
+    let vector = if crate::semantic::is_ready(&settings) {
+        crate::semantic::embed_query(&settings, &question).ok()
+    } else {
+        None
+    };
+
     let mut chunks: Vec<(String, String)> = Vec::new();
     {
         let conn = state
@@ -1068,15 +1091,11 @@ pub fn ask_files(
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
 
-        if crate::semantic::is_ready(&settings) {
-            if let Ok(vector) = crate::semantic::embed_query(&settings, &question) {
-                if let Ok(hits) =
-                    crate::semantic::search_with_vector(&conn, &vector, top, scope.as_deref())
-                {
-                    for (path, text, _score) in hits {
-                        chunks.push((path, text));
-                    }
-                }
+        if let Some(vector) = vector {
+            if let Ok(hits) =
+                crate::semantic::search_with_vector(&conn, &vector, top, scope.as_deref())
+            {
+                chunks.extend(hits.into_iter().map(|(path, text, _)| (path, text)));
             }
         }
 

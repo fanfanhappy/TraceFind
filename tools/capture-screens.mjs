@@ -1,4 +1,4 @@
-﻿// 在隔离实例上拍 README 用的界面截图（只用假语料）。
+// 在隔离实例上拍 README 用的界面截图（只用假语料）。
 // 前置：tools/capture-screens.ps1 已用假语料启动实例。
 import fs from 'node:fs'
 import path from 'node:path'
@@ -168,6 +168,32 @@ if (settingsPage) {
   await settings.ev(`window.__TAURI_INTERNALS__.invoke('close_settings')`)
   settings.ws.close()
 }
+
+// 10) 无结果：先限定范围，再搜一个不存在的词
+await ev(`window.__TAURI_INTERNALS__.invoke('show_launcher')`)
+await sleep(600)
+await type('')
+await sleep(400)
+const scopedChip = `(() => {
+  const chip = [...document.querySelectorAll('.quickrow .chip')].find((el) => /corpus|示例/.test(el.textContent))
+  if (!chip) return 'missing'
+  chip.click()
+  return 'ok'
+})()`
+console.log('scope chip:', await ev(scopedChip))
+await sleep(400)
+await type('zzzz不存在')
+await sleep(700)
+await shoot(main, '10-no-results.png')
+await type('')
+await sleep(500)
+await ev(scopedChip)
+await sleep(400)
+
+// 11) 正文命中：行内显示「正文」来源标签
+await type('调剂')
+await sleep(900)
+await shoot(main, '11-source-tag.png')
 
 await sleep(300)
 main.ws.close()

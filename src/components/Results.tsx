@@ -1,4 +1,4 @@
-﻿import {
+import {
   File,
   FileArchive,
   FileAudio,
@@ -41,6 +41,14 @@ interface RowProps {
   roots: string[]
 }
 
+/** 只在"不是靠文件名命中"时标注来源，避免每行都堆标签 */
+function sourceTag(file: SearchHit): string | null {
+  const sources = file.sources ?? []
+  if (sources.includes('semantic')) return '语义'
+  if (sources.includes('content')) return '正文'
+  return null
+}
+
 function Row({ file, index, active, query, onHover, onActivate, onPreview, onReveal, roots }: RowProps) {
   const Icon = ICONS[file.kind] ?? File
   const name = highlight(file.name, query)
@@ -65,6 +73,7 @@ function Row({ file, index, active, query, onHover, onActivate, onPreview, onRev
 
       <span className="result__text">
         <span className="result__name" title={file.name}>
+          {sourceTag(file) && <span className="result__tag">{sourceTag(file)}</span>}
           {name.map((part, i) => (part.hit ? <mark key={i}>{part.text}</mark> : <span key={i}>{part.text}</span>))}
         </span>
         {/* 第二行只占一行：有正文片段就显示片段，否则显示目录，避免行高抖动 */}

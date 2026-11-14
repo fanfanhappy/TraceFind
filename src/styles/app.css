@@ -1339,3 +1339,32 @@ button.pill:hover {
 .preview__text--code {
   line-height: 1.55;
 }
+/* 结果来源标签：只在语义/正文命中时出现，说明"为什么这条会在这" */
+.result__tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: color-mix(in srgb, var(--accent) 82%, var(--text));
+  font-size: 10.5px;
+  line-height: 1.5;
+  vertical-align: 1px;
+}
+/* 语义结果异步补入时的轻提示：可点击跳到第一条新增 */
+.results-banner {
+  align-self: flex-start;
+  margin: 2px var(--gutter) 4px;
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: color-mix(in srgb, var(--accent) 80%, var(--text));
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.results-banner:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}

@@ -4,7 +4,7 @@ import { BrandBar } from '../components/BrandBar'
 import { SearchField } from '../components/SearchField'
 import { AskPanel } from '../components/AskPanel'
 import { ResultsList } from '../components/Results'
-import { EmptyIndex, NoResults, QuickActions } from '../components/EmptyState'
+import { EmptyIndex, NoResults, QuickActions, type NoResultReason } from '../components/EmptyState'
 import { StatusBar } from '../components/StatusBar'
 import { PreviewDrawer } from '../components/PreviewDrawer'
 import {
@@ -77,6 +77,7 @@ export function Launcher() {
   const [effectiveHotkey, setEffectiveHotkey] = useState('Alt+Space')
   const [hotkeyFallback, setHotkeyFallback] = useState(false)
   const [ask, setAsk] = useState<{ question: string; answer: Awaited<ReturnType<typeof askFiles>> | null; loading: boolean; error: string | null } | null>(null)
+  const [newHits, setNewHits] = useState<{ count: number; first: string } | null>(null)
   const [revision, setRevision] = useState(0)
   const [phase, setPhase] = useState<LauncherPhase>(isDesktop ? 'hidden' : 'visible')
 
@@ -84,6 +85,8 @@ export function Launcher() {
   // 记录当前选中项的路径：索引后台刷新后按路径恢复，避免按 Enter 打开错文件
   const activePathRef = useRef<string | null>(null)
   const queryRef = useRef('')
+  const hitsRef = useRef<SearchHit[]>([])
+  const scrollRef = useRef(0)
   const phaseRef = useRef<LauncherPhase>(phase)
   phaseRef.current = phase
 
@@ -176,9 +179,10 @@ export function Launcher() {
     if (!ready) return
     let alive = true
     const trimmed = query.trim()
+    setNewHits(null)
 
     if (trimmed) setSearching(true)
-    const delay = trimmed ? 110 : 0
+    const delay = trimmed ? 45 : 0
 
     const timer = window.setTimeout(() => {
       void (async () => {
@@ -211,12 +215,23 @@ export function Launcher() {
     const offShow = onLauncherShow(() => {
       setStatus('')
       setPreviewOpen(false)
-      setActiveIndex(0)
+      // 接着上次：按 path 恢复选中项，并回到原来的滚动位置
+      const previous = activePathRef.current
+      const list = hitsRef.current
+      const index = previous ? list.findIndex((hit) => hit.path === previous) : -1
+      setActiveIndex(index >= 0 ? index : 0)
       setPhase('showing')
       focusInput()
+      window.requestAnimationFrame(() => {
+        const el = document.getElementById('results')
+        if (el) el.scrollTop = scrollRef.current
+      })
       void getIndexStatus().then(setIndex)
     })
     const offHide = onLauncherHide(() => {
+      const el = document.getElementById('results')
+      if (el) scrollRef.current = el.scrollTop
+      setNewHits(null)
       setPhase((current) => (current === 'hidden' ? 'hidden' : 'hiding'))
     })
     const offFocus = onLauncherFocus(() => {
@@ -238,19 +253,30 @@ export function Launcher() {
     queryRef.current = query
   }, [query])
 
+  useEffect(() => {
+    hitsRef.current = hits
+  }, [hits])
+
   /* 语义结果稍后到达：只合并与当前查询一致的那一批 */
   useEffect(
     () =>
       onSemanticHits(({ query: arrived, hits: extra }) => {
         if (!extra.length || arrived !== queryRef.current) return
-        setHits((current) => {
-          const existing = new Set(current.map((hit) => hit.path))
-          const merged = [...current]
-          for (const hit of extra) {
-            if (!existing.has(hit.path)) merged.push(hit)
-          }
-          return merged
-        })
+        const current = hitsRef.current
+        const existing = new Set(current.map((hit) => hit.path))
+        const added = extra.filter((hit) => !existing.has(hit.path))
+        if (!added.length) return
+
+        const merged = [...current, ...added]
+        setHits(merged)
+        setNewHits({ count: added.length, first: added[0].path })
+
+        // 语义结果是追加的：按 path 把选中项留在原处，列表不跳
+        const previous = activePathRef.current
+        if (previous) {
+          const index = merged.findIndex((hit) => hit.path === previous)
+          if (index >= 0) setActiveIndex(index)
+        }
       }),
     [],
   )
@@ -456,6 +482,16 @@ export function Launcher() {
   const showNoResults = query.trim().length > 0 && hits.length === 0
   const showEmptyIndex = query.trim().length === 0 && hits.length === 0 && index.files === 0 && index.state !== 'scanning'
 
+  // 无结果时只陈述"确实知道"的原因，其余落回通用提示
+  const noResultReason: NoResultReason =
+    index.state === 'scanning'
+      ? 'scanning'
+      : !settings.contentIndex
+        ? 'content-off'
+        : scope
+          ? 'scoped'
+          : 'generic'
+
   return (
     <main
       className="shell launcher"
@@ -537,11 +573,45 @@ export function Launcher() {
               }}
             />
           ) : showEmptyIndex ? (
-            <EmptyIndex onScan={() => void startIndex()} />
+            <EmptyIndex
+              onScan={() => void startIndex()}
+              onOpenSettings={() => void openSettingsWindow()}
+            />
           ) : showNoResults ? (
-            <NoResults query={query} />
+            <NoResults
+              query={query}
+              reason={noResultReason}
+              onSearchAll={() => {
+                setScope(null)
+                focusInput()
+              }}
+              onEnableContent={() => {
+                void patchSettings({ contentIndex: true }).then((next) => {
+                  setSettings(next)
+                  setStatus('已开启正文索引，正在后台建立…')
+                })
+              }}
+              onOpenSettings={() => void openSettingsWindow()}
+            />
           ) : (
-            <ResultsList
+            <>
+              {newHits && (
+                <button
+                  type="button"
+                  className="results-banner"
+                  onClick={() => {
+                    const index = hits.findIndex((hit) => hit.path === newHits.first)
+                    if (index >= 0) {
+                      setActiveIndex(index)
+                      document.getElementById(`result-${index}`)?.scrollIntoView({ block: 'nearest' })
+                    }
+                    setNewHits(null)
+                  }}
+                >
+                  新增 {newHits.count} 条相关结果
+                </button>
+              )}
+              <ResultsList
               files={hits}
               activeIndex={activeIndex}
               query={query}
@@ -560,8 +630,8 @@ export function Launcher() {
               }}
               roots={settings.roots}
             />
+            </>
           )}
-
           {!query && (
             <QuickActions
               roots={settings.roots}

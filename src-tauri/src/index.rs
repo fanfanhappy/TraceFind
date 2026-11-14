@@ -1,4 +1,4 @@
-﻿//! 持久化文件名索引：SQLite 表结构、拼音字段、查询与排序。
+//! 持久化文件名索引：SQLite 表结构、拼音字段、查询与排序。
 //!
 //! 模块二只索引「名字/路径/大小/时间」，不读文件内容；
 //! 全文检索（Tantivy/FTS）在后续模块接入，届时复用同一张表的 path 主键。
@@ -23,6 +23,8 @@ pub struct FileHit {
     pub modified: i64,
     /// 正文命中片段（没有内容索引时为 None）
     pub snippet: Option<String>,
+    /// 命中来源：name / content / semantic（可多选，按固定顺序）
+    pub sources: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -412,6 +414,7 @@ fn row_to_hit(row: &rusqlite::Row<'_>) -> SqlResult<FileHit> {
         size: row.get::<_, i64>(6)? as u64,
         modified: row.get(7)?,
         snippet: None,
+        sources: Vec::new(),
     })
 }
 
@@ -481,6 +484,25 @@ pub fn search_with(
         }
     }
 
+    let exact_hits = if sort == SortMode::Relevance {
+        let exact_sql = format!(
+            "{sql} AND name_lc = ? ORDER BY mtime DESC, path LIMIT {limit}"
+        );
+        let exact = query.trim().to_lowercase();
+        let mut stmt = conn.prepare_cached(&exact_sql)?;
+        let rows = stmt.query_map(
+            rusqlite::params_from_iter(params_dyn.iter().chain(std::iter::once(&exact))),
+            row_to_hit,
+        )?;
+        rows.collect::<SqlResult<Vec<_>>>()?
+    } else {
+        Vec::new()
+    };
+
+    if exact_hits.len() >= limit {
+        return Ok(exact_hits);
+    }
+
     for term in &terms {
         sql.push_str(
             " AND (name_lc LIKE ? ESCAPE '\\' OR path LIKE ? ESCAPE '\\' \
@@ -513,7 +535,11 @@ pub fn search_with(
         collected.push(row?);
     }
 
-    let mut hits = collect(collected, &terms, limit * 4);
+    let ranked = collect(collected, &terms, limit.saturating_mul(4));
+    let exact_paths: std::collections::HashSet<_> =
+        exact_hits.iter().map(|hit| hit.path.clone()).collect();
+    let mut hits = exact_hits;
+    hits.extend(ranked.into_iter().filter(|hit| !exact_paths.contains(&hit.path)));
 
     // 非相关度排序：按用户选的键重排后再截断
     match sort {
@@ -1355,6 +1381,24 @@ mod fts_tests {
             depth: 1,
         };
         upsert_batch(conn, &[entry], 1).unwrap();
+    }
+
+    #[test]
+    fn exact_name_survives_recent_candidate_limit() {
+        let mut conn = memory();
+        seed(&mut conn, "D:\\Work\\budget.txt", "budget.txt", "D:\\Work");
+        seed(&mut conn, "D:\\Workbench\\budget.txt", "budget.txt", "D:\\Workbench");
+        conn.execute_batch(
+            r"WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < 805)
+             INSERT INTO files(path, name, name_lc, dir, ext, kind, size, mtime, depth, py, pyf, gen)
+             SELECT 'D:\Work\draft-' || x, 'draft-budget.txt', 'draft-budget.txt',
+                 'D:\Work', 'txt', 'doc', 10, 1800000000, 1, '', '', 1 FROM n;",
+        ).unwrap();
+
+        let hits = search_with(&conn, "BUDGET.TXT", Some("D:\\Work"), 2, Some("doc"), SortMode::Relevance).unwrap();
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].path, "D:\\Work\\budget.txt");
+        assert_eq!(hits[1].name, "draft-budget.txt");
     }
 
     #[test]
