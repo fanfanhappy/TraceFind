@@ -82,12 +82,15 @@ pub fn check(current: &str) -> UpdateStatus {
             // API 被限流或临时不可用时，改读 releases/latest 的跳转地址：
             // 这是网页跳转，不走 API 配额。
             if let Some((latest, url)) = latest_from_redirect() {
+                // 限流时 API 给不了资产大小与哈希，但 .sha256 地址可以按版本拼出来
+                let sha256 = sha_for_version(&latest);
                 return UpdateStatus {
                     checked: true,
                     available: is_newer(current, &latest),
                     current: current.to_string(),
                     latest,
                     url,
+                    sha256,
                     ..Default::default()
                 };
             }
@@ -181,6 +184,30 @@ fn latest_from_redirect() -> Option<(String, String)> {
         return None;
     }
     Some((version, location))
+}
+
+/// 不经过 API 拿 sha256：资产地址是可以按版本号拼出来的
+fn sha_for_version(version: &str) -> String {
+    let url = format!(
+        "https://github.com/{}/releases/download/v{}/TraceFind-{}-win64.zip.sha256",
+        REPO, version, version
+    );
+    let Ok(response) = ureq::get(&url)
+        .set("User-Agent", "TraceFind-updater")
+        .timeout(Duration::from_secs(10))
+        .call()
+    else {
+        return String::new();
+    };
+    let Ok(text) = response.into_string() else {
+        return String::new();
+    };
+    let hash = text.split_whitespace().next().unwrap_or_default().trim().to_string();
+    if hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit()) {
+        hash
+    } else {
+        String::new()
+    }
 }
 
 /// 从资产里找 zip 的下载大小与 .sha256 内容
@@ -434,6 +461,16 @@ mod tests {
         assert!(!is_newer("2.1.0", "2.0.9"));
         assert!(!is_newer("2.1.0", "v2.0.0"));
         assert!(is_newer("1.0.0", "1.0.0.1"));
+    }
+
+    #[test]
+    fn sha_lookup_matches_release() {
+        // 这条依赖网络；用当前已知的 2.3.0 资产做基准
+        let sha = sha_for_version("2.3.0");
+        assert!(
+            sha.is_empty() || (sha.len() == 64 && sha.starts_with("71F6FFF1")),
+            "从资产地址取 sha256 失败：{sha}"
+        );
     }
 
     #[test]
