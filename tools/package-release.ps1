@@ -38,6 +38,9 @@ $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
 "$hash  TraceFind-$Version-win64.zip" |
     Out-File (Join-Path $outDir "TraceFind-$Version-win64.zip.sha256") -Encoding ASCII
 
+# 安装包：可选安装目录 + 快捷方式（与 zip 同一份 exe）
+& (Join-Path $root 'tools\build-installer.ps1') -Version $Version
+
 "打包完成："
 "  压缩包  $zip ({0:N1} MB)" -f ((Get-Item $zip).Length / 1MB)
 "  SHA256  $hash"

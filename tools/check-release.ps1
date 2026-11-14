@@ -61,6 +61,21 @@ if ($zipOk -and (Test-Path $shaFile)) {
 }
 Check 'sha256 一致' $shaOk $(if ($shaDetail) { $shaDetail.Substring(0, 16) + '…' } else { '缺少 .sha256 或 zip' })
 
+$setup = "release\TraceFind-$Version-win64-setup.exe"
+$setupShaFile = "$setup.sha256"
+$setupOk = Test-Path $setup
+Check '本地安装包' $setupOk $(if ($setupOk) { '{0:N1} MB' -f ((Get-Item $setup).Length / 1MB) } else { $setup })
+
+$setupDetail = ''
+if ($setupOk -and (Test-Path $setupShaFile)) {
+    $expected = (Get-Content $setupShaFile -Raw -Encoding ASCII).Trim().Split(' ')[0].ToUpper()
+    $actual = (Get-FileHash $setup -Algorithm SHA256).Hash.ToUpper()
+    $setupDetail = $actual
+    Check '安装包 sha256 一致' ($expected -eq $actual) ($actual.Substring(0, 16) + '…')
+} else {
+    Check '安装包 sha256 一致' $false '缺少 .sha256 或 setup.exe'
+}
+
 # ---------- 文档 ----------
 $notes = "docs\release-$Version.md"
 Check '发布说明存在' (Test-Path $notes) $notes
@@ -92,6 +107,8 @@ if (-not $token) {
         $names = @($release.assets | ForEach-Object { $_.name })
         Check '资产 zip' ($names -contains "TraceFind-$Version-win64.zip") ($names -join ', ')
         Check '资产 sha256' ($names -contains "TraceFind-$Version-win64.zip.sha256") $(if ($names -contains "TraceFind-$Version-win64.zip.sha256") { '已上传' } else { '缺少 .sha256' })
+        Check '资产 setup' ($names -contains "TraceFind-$Version-win64-setup.exe") $(if ($names -contains "TraceFind-$Version-win64-setup.exe") { '已上传' } else { '缺少 setup.exe' })
+        Check '资产 setup sha256' ($names -contains "TraceFind-$Version-win64-setup.exe.sha256") $(if ($names -contains "TraceFind-$Version-win64-setup.exe.sha256") { '已上传' } else { '缺少 setup .sha256' })
 
         try {
             $latest = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -Headers $headers -TimeoutSec 30
@@ -125,6 +142,33 @@ if (-not $token) {
                 Check '远端 zip 与本地一致' $false '下载失败'
             } finally {
                 Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+            }
+
+            if ($setupDetail) {
+                $tmpSetup = Join-Path $env:TEMP "tf-check-$Version-setup.exe"
+                $remoteSetup = ''
+                $gotSetup = $false
+                try {
+                    for ($attempt = 1; $attempt -le 3 -and -not $gotSetup; $attempt++) {
+                        Remove-Item $tmpSetup -Force -ErrorAction SilentlyContinue
+                        curl.exe -s -L --retry 3 --retry-delay 2 --max-time 600 -o $tmpSetup "https://github.com/$repo/releases/download/$tag/TraceFind-$Version-win64-setup.exe" | Out-Null
+                        if ((Test-Path $tmpSetup) -and ((Get-Item $tmpSetup).Length -eq (Get-Item $setup).Length)) {
+                            $gotSetup = $true
+                        } else {
+                            Start-Sleep -Seconds 2
+                        }
+                    }
+                    if ($gotSetup) {
+                        $remoteSetup = (Get-FileHash $tmpSetup -Algorithm SHA256).Hash.ToUpper()
+                        Check '远端安装包与本地一致' ($remoteSetup -eq $setupDetail) $remoteSetup.Substring(0, 16)
+                    } else {
+                        Check '远端安装包与本地一致' $false '下载不完整（已重试 3 次）'
+                    }
+                } catch {
+                    Check '远端安装包与本地一致' $false '下载失败'
+                } finally {
+                    Remove-Item $tmpSetup -Force -ErrorAction SilentlyContinue
+                }
             }
         }
     }
