@@ -670,11 +670,18 @@ pub fn recent_files(
     scope: Option<String>,
     limit: Option<usize>,
 ) -> Result<Vec<FileHit>, String> {
+    let settings = state.settings_snapshot();
+    let kind = if settings.type_filter == "all" {
+        None
+    } else {
+        Some(settings.type_filter.clone())
+    };
     let conn = state
         .db
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    index::recent(&conn, scope.as_deref(), limit.unwrap_or(5)).map_err(|err| err.to_string())
+    index::recent_filtered(&conn, scope.as_deref(), limit.unwrap_or(5), kind.as_deref())
+        .map_err(|err| err.to_string())
 }
 
 /// 打开文件前后调用：hold=true 时窗口不因失焦隐藏，

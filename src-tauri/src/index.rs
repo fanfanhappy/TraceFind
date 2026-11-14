@@ -598,12 +598,27 @@ fn is_subsequence(needle: &str, haystack: &str) -> bool {
 }
 
 pub fn recent(conn: &Connection, scope: Option<&str>, limit: usize) -> SqlResult<Vec<FileHit>> {
+    recent_filtered(conn, scope, limit, None)
+}
+
+/// 最近使用；`kind_group` 与搜索的类型筛选一致（doc 含 pdf，other 含 binary 等）
+pub fn recent_filtered(
+    conn: &Connection,
+    scope: Option<&str>,
+    limit: usize,
+    kind_group: Option<&str>,
+) -> SqlResult<Vec<FileHit>> {
+    let kind_clause = kind_group
+        .and_then(kind_group_sql)
+        .map(|clause| format!(" AND {clause}"))
+        .unwrap_or_default();
+
     match scope.filter(|root| !root.is_empty()) {
         Some(root) => {
             let (exact, prefix) = scope_patterns(root);
             let mut stmt = conn.prepare(&format!(
                 "SELECT {SELECT_COLUMNS} FROM files \
-                 WHERE kind != 'folder' AND (path = ?1 OR path LIKE ?2 ESCAPE '\\') \
+                 WHERE kind != 'folder'{kind_clause} AND (path = ?1 OR path LIKE ?2 ESCAPE '\\') \
                  ORDER BY mtime DESC LIMIT ?3"
             ))?;
             let rows = stmt.query_map(params![exact, prefix, limit as i64], row_to_hit)?;
@@ -611,7 +626,8 @@ pub fn recent(conn: &Connection, scope: Option<&str>, limit: usize) -> SqlResult
         }
         None => {
             let mut stmt = conn.prepare(&format!(
-                "SELECT {SELECT_COLUMNS} FROM files WHERE kind != 'folder' ORDER BY mtime DESC LIMIT ?1"
+                "SELECT {SELECT_COLUMNS} FROM files WHERE kind != 'folder'{kind_clause} \
+                 ORDER BY mtime DESC LIMIT ?1"
             ))?;
             let rows = stmt.query_map(params![limit as i64], row_to_hit)?;
             rows.collect()

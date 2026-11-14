@@ -30,6 +30,22 @@
 
 可以按目录和文件类型缩小范围，按相关度、修改时间、名称或大小排序。找到候选后，用快速预览查看图片、分页文本或带语法高亮的代码，再决定打开哪一份。
 
+## 界面
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screens/02-preview-docx.png" alt="文档预览"><br /><sub>文档预览：正文直接可读，命中词高亮</sub></td>
+    <td width="50%"><img src="docs/screens/03-preview-code.png" alt="代码预览"><br /><sub>代码预览：语法高亮，长文件分页加载</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screens/04-preview-image.png" alt="图片预览"><br /><sub>图片预览：不打开外部程序先看内容</sub></td>
+    <td width="50%"><img src="docs/screens/05-filter-code.png" alt="类型筛选"><br /><sub>类型筛选：只看代码，范围和排序同步生效</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screens/06-settings-search.png" alt="搜索与排序"><br /><sub>搜索与排序：相关度 / 时间 / 名称 / 大小</sub></td>
+    <td width="50%"><img src="docs/screens/07-settings-ai.png" alt="AI 与模型"><br /><sub>AI 与模型：本地模型或云端接口</sub></td>
+  </tr>
+</table>
 ## 开始使用
 
 1. 从 [GitHub Releases](https://github.com/fanfanhappy/TraceFind/releases) 获取 Windows x64 压缩包，解压后运行 `TraceFind.exe`。程序依赖 **WebView2 Runtime**。
