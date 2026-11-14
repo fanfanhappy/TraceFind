@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
   FolderSearch,
@@ -29,6 +29,7 @@ import {
   openSettingsWindow,
   pauseIndex,
   patchSettings,
+  restartOnboarding,
   quitApp,
   rebuildContent,
   rebuildSemantic,
@@ -982,6 +983,24 @@ export function Settings() {
                     <dt>配置目录</dt>
                     <dd title={info?.dataDir}>{info?.dataDir ?? '—'}</dd>
                   </dl>
+                </div>
+              </div>
+
+              <div className="setting-group">
+                <div className="setting-row">
+                  <span className="setting-row__text">
+                    <span className="setting-row__title">重新观看新手引导</span>
+                    <span className="setting-row__desc">不改变已有目录与索引，只看一遍三步引导。</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="linkbtn"
+                    onClick={() => {
+                      void restartOnboarding().then(() => void openSettingsWindow())
+                    }}
+                  >
+                    重新播放
+                  </button>
                 </div>
               </div>
 

@@ -8,6 +8,7 @@ import { ResultsList } from '../components/Results'
 import { EmptyIndex, NoResults, QuickActions, type NoResultReason } from '../components/EmptyState'
 import { StatusBar } from '../components/StatusBar'
 import { PreviewDrawer } from '../components/PreviewDrawer'
+import { Onboarding } from '../components/Onboarding'
 import {
   defaultSettings,
   frontendReady,
@@ -531,6 +532,7 @@ export function Launcher() {
       className="shell launcher"
       data-phase={phase}
       data-preview={previewFile ? 'true' : 'false'}
+      data-onboarding={isDesktop && ready && !settings.onboardingComplete ? 'true' : undefined}
       onAnimationEnd={onAnimationEnd}
       onKeyDown={onKeyDown}
     >
@@ -723,6 +725,17 @@ export function Launcher() {
         status={status}
         onOpenSettings={() => void openSettingsWindow()}
       />
+
+      {isDesktop && ready && !settings.onboardingComplete && (
+        <Onboarding
+          settings={settings}
+          hotkey={effectiveHotkey}
+          onDone={(next) => {
+            setSettings(next)
+            setStatus('索引已开始，稍等一下就能搜')
+          }}
+        />
+      )}
     </main>
   )
 }

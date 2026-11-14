@@ -13,6 +13,7 @@
     "core:window:allow-is-visible",
     "core:event:default",
     "global-shortcut:default",
-    "autostart:default"
+    "autostart:default",
+    "dialog:allow-open"
   ]
 }

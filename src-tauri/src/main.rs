@@ -1,4 +1,4 @@
-﻿#![windows_subsystem = "windows"]
+#![windows_subsystem = "windows"]
 
 mod autostart_manager;
 mod commands;
@@ -261,6 +261,7 @@ fn main() {
             commands::get_settings,
             commands::suggested_roots,
             commands::complete_onboarding,
+        commands::restart_onboarding,
             commands::patch_settings,
             commands::set_window_dark,
             commands::set_hold_visible,

@@ -42,14 +42,19 @@ pub fn complete_onboarding<R: Runtime>(
     }
     let current = {
         let mut settings = state.settings.lock().unwrap_or_else(|err| err.into_inner());
-        if settings.onboarding_complete || !settings.roots.is_empty() {
-            return Ok(settings::redacted(settings.clone()));
-        }
+        // 重看引导时 roots 已经存在：保留原有配置，只补标记
+        // 只有"没配过目录"才算首次运行；重看引导不该改掉内容索引开关
+        let first_run = !settings.onboarding_complete && settings.roots.is_empty();
         let mut next = settings.clone();
-        next.roots = validated;
+        if !validated.is_empty() {
+            next.roots = validated;
+        }
         next.onboarding_complete = true;
-        next.content_index = false;
-        next.ocr_enabled = false;
+        if first_run {
+            // 首次运行先只索引文件名，避免一上来就扫全盘正文
+            next.content_index = false;
+            next.ocr_enabled = false;
+        }
         settings::save(&app, &next)?;
         *settings = next.clone();
         next
@@ -61,6 +66,26 @@ pub fn complete_onboarding<R: Runtime>(
     let current = settings::redacted(current);
     let _ = app.emit("aura:settings-changed", current.clone());
     Ok(current)
+}
+
+/// 重新播放首次使用引导：只清标记，不动已有索引与目录。
+#[tauri::command]
+pub fn restart_onboarding<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<AppSettings, String> {
+    let current = {
+        let mut settings = state.settings.lock().unwrap_or_else(|err| err.into_inner());
+        let mut next = settings.clone();
+        next.onboarding_complete = false;
+        settings::save(&app, &next)?;
+        *settings = next.clone();
+        next
+    };
+    let redacted = settings::redacted(current);
+    let _ = app.emit("aura:settings-changed", redacted.clone());
+    crate::lifecycle::show(&app);
+    Ok(redacted)
 }
 
 /// 用解析后的明暗重新应用原生材质（主窗口与设置窗口一起）。

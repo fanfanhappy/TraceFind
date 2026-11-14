@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/fanfanhappy/TraceFind/releases/latest">下载 Windows 版</a> ·
-  <a href="docs/release-1.5.0.md">1.1.1 发布说明</a> ·
+  <a href="docs/release-2.0.0.md">1.1.1 发布说明</a> ·
   <a href="docs/DEVELOPMENT.md">开发指南</a> ·
   <a href="docs/DATA-AND-PRIVACY.md">数据与隐私</a>
 </p>
@@ -29,6 +29,17 @@
 
 [搜索示例](#你还记得什么) · [下载安装](#开始使用) · [技术架构](#搜索是怎么实现的) · [常见问题](#常见问题)
 
+## 第一次打开
+
+三步就能用起来：欢迎 → 选要搜的文件夹 → 建立索引。动画会跟着系统「减少动效」设置自动关掉；示例图为演示路径。
+
+<p align="center">
+  <img src="docs/screens/13-onboarding-welcome.png" width="49%" alt="欢迎">
+  <img src="docs/screens/14-onboarding-folders.png" width="49%" alt="选择文件夹"><br />
+  <img src="docs/screens/15-onboarding-ready.png" width="49%" alt="开始建立索引">
+</p>
+
+之后想再看一遍：设置 → 关于 → 重新观看新手引导（不会动已有目录与索引）。
 ## 怎么用
 
 <img src="docs/assets/promo-usage.png" alt="四个动作：唤起 → 搜 → 先看 → 直接问">
@@ -174,7 +185,7 @@ pnpm dev
 ## 项目文档
 
 - [开发、构建与打包](docs/DEVELOPMENT.md)
-- [TraceFind 1.1.1 发布说明](docs/release-1.5.0.md)
+- [TraceFind 1.1.1 发布说明](docs/release-2.0.0.md)
 - [贡献与截图规范](docs/contributing.md)
 - [历史变更](docs/changelog-0.6.0.md)
 - [反馈问题](https://github.com/fanfanhappy/TraceFind/issues)

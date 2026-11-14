@@ -1,4 +1,4 @@
-﻿// 桌面桥接层：把 Tauri 能力收敛成一组带类型的方法。
+// 桌面桥接层：把 Tauri 能力收敛成一组带类型的方法。
 // 在纯浏览器（vite dev / 自动化检查）下自动降级为 localStorage + 模拟生命周期，
 // 保证界面不依赖桌面环境即可运行与验证。
 
@@ -195,6 +195,25 @@ export async function loadSettings(): Promise<AppSettings> {
 
 export async function suggestedRoots(): Promise<string[]> {
   return isDesktop ? invoke<string[]>('suggested_roots') : []
+}
+
+/** 打开系统目录选择器；用户在引导里添加自定义搜索范围 */
+export async function pickFolders(): Promise<string[]> {
+  if (!isDesktop) return []
+  const picked = await invoke<string[] | string | null>('plugin:dialog|open', {
+    options: {
+      directory: true,
+      multiple: true,
+      title: '选择要搜索的文件夹',
+    },
+  })
+  if (!picked) return []
+  return Array.isArray(picked) ? picked : [picked]
+}
+
+/** 重新观看首次使用引导（保留已有目录与索引） */
+export async function restartOnboarding(): Promise<AppSettings> {
+  return isDesktop ? invoke<AppSettings>('restart_onboarding') : patchSettings({ onboardingComplete: false })
 }
 
 export async function completeOnboarding(roots: string[]): Promise<AppSettings> {
