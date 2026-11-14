@@ -418,8 +418,13 @@ export function Launcher() {
     void revealFile(hit.path)
   }
 
+  function focusResults() {
+    document.getElementById('results')?.focus({ preventScroll: true })
+  }
+
   function move(delta: number) {
     if (hits.length === 0) return
+    focusResults()
     setActiveIndex((current) => {
       const from = current < 0 ? (delta > 0 ? -1 : 0) : current
       return (from + delta + hits.length) % hits.length
@@ -440,7 +445,17 @@ export function Launcher() {
     if (onboardingOpen) return
     // 输入法组合期间不接管按键（中文输入必须可用）
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
-    const inInput = event.target === inputRef.current
+
+    // 焦点在结果列表时，继续输入应该回到搜索框（否则方向键之后就没法改词）
+    const focusedResults = (event.target as HTMLElement).id === 'results'
+    if (focusedResults && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      const printable = event.key.length === 1 && event.key !== ' '
+      const editing = event.key === 'Backspace' || event.key === 'Delete'
+      if (printable || editing) {
+        focusInput()
+        return
+      }
+    }
 
     // 焦点在按钮上时把 Enter / Space 交还给浏览器，否则键盘用户按不动置顶/设置/关闭
     const target = event.target as HTMLElement
@@ -474,9 +489,9 @@ export function Launcher() {
     }
 
     // 不想先按 Tab 的话：Ctrl+Space 直接在输入框里开/关预览
-    if (event.key === ' ' && event.ctrlKey) {
+    if (event.key === ' ' && (event.ctrlKey || target.id === 'results')) {
       event.preventDefault()
-      if (hits.length === 0) return
+      if (event.repeat || !hits[activeIndex]) return
       if (isStale()) {
         setStatus('结果还在更新，稍等一下再预览')
         return
@@ -484,6 +499,8 @@ export function Launcher() {
       setPreviewOpen((open) => !open)
       return
     }
+
+    if (target.closest('.preview') && event.key !== 'Escape') return
 
     switch (event.key) {
       case 'Escape':
@@ -494,7 +511,7 @@ export function Launcher() {
           focusInput()
         } else if (previewOpen) {
           setPreviewOpen(false)
-          focusInput()
+          focusResults()
         } else if (query) {
           updateQuery('')
           focusInput()
@@ -513,12 +530,6 @@ export function Launcher() {
       case 'Enter':
         event.preventDefault()
         if (activeIndex >= 0) openAt(activeIndex)
-        return
-      case ' ':
-        if (!inInput && activeIndex >= 0) {
-          event.preventDefault()
-          setPreviewOpen((open) => !open)
-        }
         return
       default:
     }
@@ -693,7 +704,7 @@ export function Launcher() {
               query={query}
               onSelect={(index) => {
                 setActiveIndex(index)
-                focusInput()
+                focusResults()
               }}
               onActivate={(index) => {
                 openAt(index)
@@ -706,6 +717,7 @@ export function Launcher() {
                 }
                 setActiveIndex(index)
                 setPreviewOpen(true)
+                focusResults()
               }}
               roots={settings.roots}
             />
@@ -726,7 +738,7 @@ export function Launcher() {
           query={query}
           onClose={() => {
             setPreviewOpen(false)
-            focusInput()
+            focusResults()
           }}
           onOpen={(file) => {
             const index = hits.findIndex((hit) => hit.path === file.path)
