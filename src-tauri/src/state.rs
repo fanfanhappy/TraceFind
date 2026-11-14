@@ -39,7 +39,7 @@ pub struct AppState {
     /// 扫描范围/排除项的版本号：每次变更 +1，用来让旧扫描任务主动作废
     pub config_version: AtomicU64,
     /// 最近一次查询词：异步语义结果回来时用它判断是否还有效
-    pub current_query: Mutex<String>,
+    pub search_generation: AtomicU64,
     /// 扫描结束后是否需要再补一轮（范围变更时置位）
     pub pending_rescan: AtomicBool,
     pub scan_paused: AtomicBool,
@@ -67,7 +67,7 @@ impl AppState {
             scan_running: AtomicBool::new(false),
             hold_visible: AtomicBool::new(false),
             config_version: AtomicU64::new(0),
-            current_query: Mutex::new(String::new()),
+            search_generation: AtomicU64::new(0),
             pending_rescan: AtomicBool::new(false),
             scan_paused: AtomicBool::new(false),
             suppress_hide_until: Mutex::new(None),

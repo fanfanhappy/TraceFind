@@ -297,7 +297,9 @@ fn run<R: Runtime>(
         crate::aura_log!("索引清理：移除 {removed} 个已不存在的条目");
     }
     // 顺带清掉已删除文件的正文记录与文本块
-    let _ = index::prune_semantic(&conn);
+    if index::prune_semantic(&conn).is_ok_and(|removed| removed > 0) {
+        crate::semantic::mark_vectors_changed();
+    }
     if let Ok(removed_docs) = index::prune_docs(&conn) {
         if removed_docs > 0 {
             crate::aura_log!("正文索引清理：{removed_docs} 条");

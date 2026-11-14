@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import type { AnimationEvent as ReactAnimationEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { BrandBar } from '../components/BrandBar'
 import { SearchField } from '../components/SearchField'
@@ -78,13 +79,16 @@ export function Launcher() {
   const [hotkeyFallback, setHotkeyFallback] = useState(false)
   const [ask, setAsk] = useState<{ question: string; answer: Awaited<ReturnType<typeof askFiles>> | null; loading: boolean; error: string | null } | null>(null)
   const [newHits, setNewHits] = useState<{ count: number; first: string } | null>(null)
+  // 这批结果对应的「查询 + 范围」，用来判断列表是否已经过期
+  const [resultsKey, setResultsKey] = useState('')
   const [revision, setRevision] = useState(0)
   const [phase, setPhase] = useState<LauncherPhase>(isDesktop ? 'hidden' : 'visible')
 
   const inputRef = useRef<HTMLInputElement>(null)
   // 记录当前选中项的路径：索引后台刷新后按路径恢复，避免按 Enter 打开错文件
   const activePathRef = useRef<string | null>(null)
-  const queryRef = useRef('')
+  const searchRequest = useRef(0)
+  const pendingSemantic = useRef<SearchHit[] | null>(null)
   const hitsRef = useRef<SearchHit[]>([])
   const scrollRef = useRef(0)
   const phaseRef = useRef<LauncherPhase>(phase)
@@ -179,6 +183,8 @@ export function Launcher() {
     if (!ready) return
     let alive = true
     const trimmed = query.trim()
+    const requestId = ++searchRequest.current
+    pendingSemantic.current = []
     setNewHits(null)
 
     if (trimmed) setSearching(true)
@@ -187,27 +193,34 @@ export function Launcher() {
     const timer = window.setTimeout(() => {
       void (async () => {
         const list = trimmed
-          ? await searchFiles(trimmed, scope, Math.max(20, settings.resultLimit * 3))
+          ? await searchFiles(trimmed, scope, Math.max(20, settings.resultLimit * 3), requestId)
           : await recentFiles(scope, settings.resultLimit)
         if (!alive) return
         const limited = list.slice(0, Math.max(3, settings.resultLimit))
         const previous = activePathRef.current
+        hitsRef.current = limited
         setHits(limited)
+        setResultsKey(trimmed + '|' + (scope ?? ''))
+        const pending = pendingSemantic.current
+        pendingSemantic.current = null
+        if (pending?.length) mergeSemanticHits(pending)
         if (previous) {
           const kept = limited.findIndex((hit) => hit.path === previous)
           setActiveIndex(kept >= 0 ? kept : limited.length > 0 ? 0 : -1)
         } else {
           setActiveIndex(limited.length > 0 ? 0 : -1)
         }
+        if (!limited.length && hitsRef.current.length) setActiveIndex(0)
         setSearching(false)
       })()
     }, delay)
 
     return () => {
       alive = false
+      searchRequest.current++
       window.clearTimeout(timer)
     }
-  }, [query, scope, settings.resultLimit, settings.typeFilter, settings.sortMode, ready, index.lastScan, revision])
+  }, [query, scope, settings.resultLimit, settings.typeFilter, settings.sortMode, settings.semanticEnabled, settings.semanticProvider, settings.cloudBaseUrl, settings.cloudModel, ready, index.lastScan, revision])
 
   /* ---------------------------------------------------- 生命周期：事件驱动 */
 
@@ -248,36 +261,38 @@ export function Launcher() {
 
   useEffect(() => onSettingsChanged((next) => setSettings(next)), [])
 
-  /* 查询词镜像：语义结果回来时用它判断是否还属于当前输入 */
-  useEffect(() => {
-    queryRef.current = query
-  }, [query])
-
   useEffect(() => {
     hitsRef.current = hits
   }, [hits])
 
-  /* 语义结果稍后到达：只合并与当前查询一致的那一批 */
+  function mergeSemanticHits(extra: SearchHit[]) {
+    const current = hitsRef.current
+    const existing = new Set(current.map((hit) => hit.path))
+    const added = extra.filter((hit) => !existing.has(hit.path))
+    if (!added.length) return
+    const merged = [...current, ...added]
+    hitsRef.current = merged
+    setHits(merged)
+    setNewHits({ count: added.length, first: added[0].path })
+
+    // 语义结果是追加的：按 path 把选中项留在原处，列表不跳
+    const previous = activePathRef.current
+    if (previous) {
+      const index = merged.findIndex((hit) => hit.path === previous)
+      if (index >= 0) setActiveIndex(index)
+    }
+  }
+
   useEffect(
-    () =>
-      onSemanticHits(({ query: arrived, hits: extra }) => {
-        if (!extra.length || arrived !== queryRef.current) return
-        const current = hitsRef.current
-        const existing = new Set(current.map((hit) => hit.path))
-        const added = extra.filter((hit) => !existing.has(hit.path))
-        if (!added.length) return
-
-        const merged = [...current, ...added]
-        setHits(merged)
-        setNewHits({ count: added.length, first: added[0].path })
-
-        // 语义结果是追加的：按 path 把选中项留在原处，列表不跳
-        const previous = activePathRef.current
-        if (previous) {
-          const index = merged.findIndex((hit) => hit.path === previous)
-          if (index >= 0) setActiveIndex(index)
-        }
-      }),
+    () => onSemanticHits(({ requestId, hits: extra }) => {
+      if (requestId !== searchRequest.current) return
+      if (pendingSemantic.current) pendingSemantic.current = extra
+      else {
+        const wasEmpty = hitsRef.current.length === 0
+        mergeSemanticHits(extra)
+        if (wasEmpty && extra.length) setActiveIndex(0)
+      }
+    }),
     [],
   )
 
@@ -354,6 +369,10 @@ export function Launcher() {
   }
 
   function openAt(index: number) {
+    if (isStale()) {
+      setStatus('结果还在更新，稍等一下再打开')
+      return
+    }
     const hit = hits[index]
     if (!hit) return
     setActiveIndex(index)
@@ -365,6 +384,10 @@ export function Launcher() {
   }
 
   function revealAt(index: number) {
+    if (isStale()) {
+      setStatus('结果还在更新，稍等一下再定位')
+      return
+    }
     const hit = hits[index]
     if (!hit) return
     setStatus(`已在资源管理器中定位：${hit.name}`)
@@ -428,14 +451,23 @@ export function Launcher() {
     // 不想先按 Tab 的话：Ctrl+Space 直接在输入框里开/关预览
     if (event.key === ' ' && event.ctrlKey) {
       event.preventDefault()
-      if (hits.length > 0) setPreviewOpen((open) => !open)
+      if (hits.length === 0) return
+      if (isStale()) {
+        setStatus('结果还在更新，稍等一下再预览')
+        return
+      }
+      setPreviewOpen((open) => !open)
       return
     }
 
     switch (event.key) {
       case 'Escape':
         event.preventDefault()
-        if (previewOpen) {
+        // 先关面板，再关预览，最后才清空/隐藏
+        if (ask) {
+          setAsk(null)
+          focusInput()
+        } else if (previewOpen) {
           setPreviewOpen(false)
           focusInput()
         } else if (query) {
@@ -482,6 +514,8 @@ export function Launcher() {
   const showNoResults = query.trim().length > 0 && hits.length === 0
   const showEmptyIndex = query.trim().length === 0 && hits.length === 0 && index.files === 0 && index.state !== 'scanning'
 
+  // 结果与查询是否对得上：防抖期间旧结果还在，不能拿来打开
+  const isStale = () => query.trim() + '|' + (scope ?? '') !== resultsKey
   // 无结果时只陈述"确实知道"的原因，其余落回通用提示
   const noResultReason: NoResultReason =
     index.state === 'scanning'
@@ -525,6 +559,20 @@ export function Launcher() {
 
 
           {!ask && (<div className="filters" role="toolbar" aria-label="结果类型筛选">
+            {scope && (
+              <button
+                type="button"
+                className="chip chip--active"
+                title={`清除目录限制：${scope}`}
+                onClick={() => {
+                  setScope(null)
+                  focusInput()
+                }}
+              >
+                范围：{scope.split(/[\\/]/).filter(Boolean).pop()}
+                <X size={11} strokeWidth={2.2} />
+              </button>
+            )}
             {previewOpen ? (
               <span className="filters__label">{query ? '搜索结果' : '最近使用'}</span>
             ) : (
@@ -614,19 +662,23 @@ export function Launcher() {
               <ResultsList
               files={hits}
               activeIndex={activeIndex}
+              stale={isStale()}
               query={query}
-              onHover={setActiveIndex}
+              onSelect={(index) => {
+                setActiveIndex(index)
+                focusInput()
+              }}
               onActivate={(index) => {
                 openAt(index)
                 focusInput()
               }}
               onPreview={(index) => {
+                if (isStale()) {
+                  setStatus('结果还在更新，稍等一下再预览')
+                  return
+                }
                 setActiveIndex(index)
                 setPreviewOpen(true)
-              }}
-              onReveal={(index) => {
-                revealAt(index)
-                focusInput()
               }}
               roots={settings.roots}
             />
@@ -668,13 +720,8 @@ export function Launcher() {
         hotkeyFallback={hotkeyFallback}
         desktop={isDesktop}
         index={index}
-        scope={scope}
         status={status}
         onOpenSettings={() => void openSettingsWindow()}
-        onClearScope={() => {
-          setScope(null)
-          focusInput()
-        }}
       />
     </main>
   )

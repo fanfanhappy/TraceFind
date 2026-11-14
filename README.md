@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/fanfanhappy/TraceFind/releases/latest">下载 Windows 版</a> ·
-  <a href="docs/release-1.3.0.md">1.1.1 发布说明</a> ·
+  <a href="docs/release-1.4.0.md">1.1.1 发布说明</a> ·
   <a href="docs/DEVELOPMENT.md">开发指南</a> ·
   <a href="docs/DATA-AND-PRIVACY.md">数据与隐私</a>
 </p>
@@ -174,7 +174,7 @@ pnpm dev
 ## 项目文档
 
 - [开发、构建与打包](docs/DEVELOPMENT.md)
-- [TraceFind 1.1.1 发布说明](docs/release-1.3.0.md)
+- [TraceFind 1.1.1 发布说明](docs/release-1.4.0.md)
 - [贡献与截图规范](docs/contributing.md)
 - [历史变更](docs/changelog-0.6.0.md)
 - [反馈问题](https://github.com/fanfanhappy/TraceFind/issues)

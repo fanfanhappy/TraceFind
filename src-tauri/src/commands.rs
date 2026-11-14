@@ -473,16 +473,13 @@ pub fn search_files(
     query: String,
     scope: Option<String>,
     limit: Option<usize>,
+    request_id: Option<u64>,
 ) -> Result<Vec<FileHit>, String> {
     let limit = limit.unwrap_or(30);
     let settings = state.settings_snapshot();
     let content_enabled = settings.content_index;
 
-    // 记下当前查询：异步语义结果回来时用它判断是否还有效
-    *state
-        .current_query
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner()) = query.clone();
+    let generation = state.search_generation.fetch_add(1, Ordering::SeqCst) + 1;
 
     let conn = state
         .db
@@ -609,18 +606,17 @@ pub fn search_files(
             local_hits.iter().map(|hit| hit.path.clone()).collect();
 
         std::thread::spawn(move || {
-            let Ok(vector) = crate::semantic::embed_query(&settings_for_task, &query_for_task) else {
+            let state = app_handle.state::<AppState>();
+            let is_current = || state.search_generation.load(Ordering::SeqCst) == generation;
+            if !is_current() {
+                return;
+            }
+            let Ok(vector) = crate::semantic::embed_search_query(
+                &settings_for_task, &query_for_task, is_current,
+            ) else {
                 return;
             };
-
-            let state = app_handle.state::<AppState>();
-            let still_current = state
-                .current_query
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .as_str()
-                == query_for_task;
-            if !still_current {
+            if !is_current() {
                 return;
             }
 
@@ -668,13 +664,13 @@ pub fn search_files(
                 }
             }
 
-            if payload_hits.is_empty() {
+            if payload_hits.is_empty() || !is_current() {
                 return;
             }
 
             let _ = app_handle.emit(
                 "search:semantic",
-                serde_json::json!({ "query": query_for_task, "hits": payload_hits }),
+                serde_json::json!({ "query": query_for_task, "requestId": request_id, "hits": payload_hits }),
             );
         });
     }

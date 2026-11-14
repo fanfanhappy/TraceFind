@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, CornerDownLeft, Folder, Space, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, CornerDownLeft, Space } from 'lucide-react'
 import type { IndexStatus } from '../lib/bridge'
 
 interface Props {
@@ -10,10 +10,8 @@ interface Props {
   hotkeyFallback?: boolean
   desktop: boolean
   index: IndexStatus
-  scope: string | null
   status?: string
   onOpenSettings: () => void
-  onClearScope: () => void
 }
 
 function compactCount(value: number): string {
@@ -37,11 +35,6 @@ function indexLabel(index: IndexStatus): string {
   }
 }
 
-function scopeLabel(root: string): string {
-  const segments = root.split(/[\\/]/).filter(Boolean)
-  return segments[segments.length - 1] ?? root
-}
-
 /** 02｜底部状态栏：44px，只放最短的键盘提示与索引状态 */
 export function StatusBar({
   query,
@@ -51,10 +44,8 @@ export function StatusBar({
   hotkeyFallback,
   desktop,
   index,
-  scope,
   status,
   onOpenSettings,
-  onClearScope,
 }: Props) {
   return (
     <footer className="statusbar">
@@ -83,20 +74,6 @@ export function StatusBar({
             <kbd style={{ marginLeft: 4 }}>Esc</kbd>
             <span>隐藏</span>
           </>
-        )}
-        {scope && (
-          <button
-            type="button"
-            className="pill"
-            data-kind="ok"
-            title={`当前只在这个目录里搜索：${scope}。点击取消范围`}
-            onClick={onClearScope}
-            style={{ marginLeft: 6 }}
-          >
-            <Folder size={10} strokeWidth={2} />
-            范围：{scopeLabel(scope)}
-            <X size={10} strokeWidth={2.2} />
-          </button>
         )}
       </div>
 

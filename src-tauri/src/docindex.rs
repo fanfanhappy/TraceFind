@@ -5,7 +5,7 @@
 
 use std::path::Path;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
@@ -68,10 +68,21 @@ fn run<R: Runtime>(app: AppHandle<R>) {
     }
     let exts = exts;
 
+    let mut last_progress = Instant::now();
+    let mut progress_dirty = false;
+
     loop {
         let state = app.state::<AppState>();
         if state.quitting.load(Ordering::Relaxed) {
             break;
+        }
+
+        if !state.settings_snapshot().content_index || state.scan_running.load(Ordering::SeqCst) {
+            if progress_dirty {
+                let _ = app.emit("index:content", status(&app, &conn));
+                progress_dirty = false;
+                last_progress = Instant::now();
+            }
         }
 
         if !state.settings_snapshot().content_index {
@@ -108,6 +119,11 @@ fn run<R: Runtime>(app: AppHandle<R>) {
         }
 
         if pending.is_empty() {
+            if progress_dirty {
+                let _ = app.emit("index:content", status(&app, &conn));
+                progress_dirty = false;
+                last_progress = Instant::now();
+            }
             std::thread::sleep(Duration::from_millis(IDLE_SLEEP_MS));
             continue;
         }
@@ -209,9 +225,11 @@ fn run<R: Runtime>(app: AppHandle<R>) {
             std::thread::sleep(Duration::from_millis(PER_FILE_SLEEP_MS));
         }
 
-        if processed > 0 {
-            let status = status(&app, &conn);
-            let _ = app.emit("index:content", status);
+        progress_dirty |= processed > 0;
+        if progress_dirty && last_progress.elapsed() >= Duration::from_secs(1) {
+            let _ = app.emit("index:content", status(&app, &conn));
+            progress_dirty = false;
+            last_progress = Instant::now();
         }
     }
 

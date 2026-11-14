@@ -168,3 +168,18 @@ export function displayDir(dir: string, roots: string[]): string {
   }
   return shortenDir(dir)
 }
+
+/** 正文片段去掉 Markdown 标记，只留一行可读的命中上下文 */
+export function cleanSnippet(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s*/gm, '')
+    .replace(/^\s{0,3}[-*+]\s+/gm, '')
+    .replace(/^\s{0,3}>\s?/gm, '')
+    .replace(/^\s*#{1,6}\s*/gm, '')
+    .replace(/#{1,6}\s?/g, ' ')
+    .replace(/[*_`~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}

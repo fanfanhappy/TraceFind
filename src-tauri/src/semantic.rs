@@ -7,7 +7,7 @@
 //! - 查询向量与文档向量都做 L2 归一化，余弦相似度即点积。
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use std::time::Instant;
@@ -274,11 +274,11 @@ pub fn embed(settings: &AppSettings, texts: Vec<String>) -> Result<Vec<Vec<f32>>
 /* ------------------------------------------------------------------ 查询 */
 
 struct VectorCache {
-    count: i64,
     loaded: Instant,
     rows: Vec<(String, String, Vec<f32>)>,
 }
 
+static VECTORS_CHANGED: AtomicBool = AtomicBool::new(false);
 static CACHE: OnceLock<Mutex<Option<VectorCache>>> = OnceLock::new();
 
 fn cache_slot() -> &'static Mutex<Option<VectorCache>> {
@@ -286,35 +286,41 @@ fn cache_slot() -> &'static Mutex<Option<VectorCache>> {
 }
 
 fn load_cached(conn: &rusqlite::Connection) -> Result<(), String> {
-    let count = index::vector_count(conn);
+
 
     {
         let guard = cache_slot().lock().map_err(|_| "缓存锁失败".to_string())?;
         if let Some(cache) = guard.as_ref() {
-            if cache.count == count {
-                return Ok(());
-            }
             // 正在大批量重建：两秒内不重复整表重载，先用旧快照兜住查询
-            if !cache.rows.is_empty() && cache.loaded.elapsed() < Duration::from_secs(2) {
+            if !VECTORS_CHANGED.load(Ordering::Acquire)
+                || cache.loaded.elapsed() < Duration::from_secs(2)
+            {
                 return Ok(());
             }
         }
     }
 
+    VECTORS_CHANGED.swap(false, Ordering::AcqRel);
     let rows: Vec<(String, String, Vec<f32>)> = index::load_vectors(conn)
-        .map_err(|err| format!("读取向量失败：{err}"))?
+        .map_err(|err| {
+            VECTORS_CHANGED.store(true, Ordering::Release);
+            format!("读取向量失败：{err}")
+        })?
         .into_iter()
         .map(|(_id, path, text, vec)| (path, text, vec))
         .collect();
 
     if let Ok(mut guard) = cache_slot().lock() {
         *guard = Some(VectorCache {
-            count,
             loaded: Instant::now(),
             rows,
         });
     }
     Ok(())
+}
+
+pub fn mark_vectors_changed() {
+    VECTORS_CHANGED.store(true, Ordering::Release);
 }
 
 pub fn invalidate_cache() {
@@ -324,6 +330,41 @@ pub fn invalidate_cache() {
 }
 
 /// 只算查询向量：可能走网络（云端），必须在持锁之前完成
+pub fn embed_search_query(
+    settings: &AppSettings,
+    query: &str,
+    is_current: impl Fn() -> bool,
+) -> Result<Vec<f32>, String> {
+    type QueryKey = (String, String, String, String, String);
+    type QueryCache = std::collections::VecDeque<(QueryKey, Vec<f32>)>;
+    static QUERIES: OnceLock<Mutex<QueryCache>> = OnceLock::new();
+
+    let key = (
+        settings.semantic_provider.clone(),
+        settings.cloud_base_url.clone(),
+        settings.cloud_model.clone(),
+        settings.cloud_key.clone(),
+        query.to_string(),
+    );
+    // Only search workers take this lock. Serialize misses so a refresh can reuse an in-flight query.
+    let mut cache = QUERIES.get_or_init(|| Mutex::new(QueryCache::new()))
+        .lock().unwrap_or_else(|err| err.into_inner());
+    if !is_current() {
+        return Err("Search superseded".to_string());
+    }
+    if let Some(position) = cache.iter().position(|(cached, _)| cached == &key) {
+        if let Some(entry) = cache.remove(position) {
+            let vector = entry.1.clone();
+            cache.push_front(entry);
+            return Ok(vector);
+        }
+    }
+    let vector = embed_query(settings, query)?;
+    cache.push_front((key, vector.clone()));
+    cache.truncate(16);
+    Ok(vector)
+}
+
 pub fn embed_query(settings: &AppSettings, query: &str) -> Result<Vec<f32>, String> {
     if !is_ready(settings) {
         return Err("语义提供方未就绪".to_string());
@@ -520,7 +561,6 @@ pub fn spawn_worker<R: Runtime>(app: AppHandle<R>) {
                     text: String::new(),
                 }];
                 let _ = index::insert_chunks(&mut conn, &path, &placeholder);
-                invalidate_cache();
                 continue;
             }
 
@@ -559,7 +599,7 @@ pub fn spawn_worker<R: Runtime>(app: AppHandle<R>) {
                 continue;
             }
 
-            invalidate_cache();
+            mark_vectors_changed();
             let _ = app.emit("semantic:status", status(&app, &conn));
             }
         }

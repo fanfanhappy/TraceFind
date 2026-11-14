@@ -442,10 +442,11 @@ export async function searchFiles(
   query: string,
   scope: string | null = null,
   limit = 30,
+  requestId?: number,
 ): Promise<SearchHit[]> {
   if (!isDesktop) return demoSearch(query, scope, limit)
   try {
-    return await invoke<SearchHit[]>('search_files', { query, scope, limit })
+    return await invoke<SearchHit[]>('search_files', { query, scope, limit, requestId })
   } catch {
     return []
   }
@@ -548,11 +549,11 @@ export async function testCloudEmbedding(payload: {
 
 /** 语义结果异步补发：先返回本地结果，云端/本地语义稍后到达 */
 export function onSemanticHits(
-  cb: (payload: { query: string; hits: SearchHit[] }) => void,
+  cb: (payload: { query: string; requestId: number | null; hits: SearchHit[] }) => void,
 ): () => void {
   if (!isDesktop) return () => {}
   let un: UnlistenFn | undefined
-  void listen<{ query: string; hits: SearchHit[] }>('search:semantic', event =>
+  void listen<{ query: string; requestId: number | null; hits: SearchHit[] }>('search:semantic', event =>
     cb(event.payload),
   ).then(fn => (un = fn))
   return () => un?.()
