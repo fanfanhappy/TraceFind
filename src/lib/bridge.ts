@@ -252,6 +252,25 @@ export async function checkUpdate(record = true): Promise<UpdateStatus> {
   return invoke<UpdateStatus>('check_update', { record })
 }
 
+export interface UpdateProgress {
+  downloaded: number
+  total: number
+}
+
+/** 下载并安装更新：校验 sha256 后替换 exe 并重启 */
+export async function installUpdate(url: string, sha256: string): Promise<void> {
+  await invoke('install_update', { url, sha256 })
+}
+
+/** 订阅下载进度 */
+export function onUpdateProgress(cb: (payload: UpdateProgress) => void): () => void {
+  let unlisten: (() => void) | undefined
+  void listen<UpdateProgress>('update:progress', (event) => cb(event.payload)).then((fn) => {
+    unlisten = fn
+  })
+  return () => unlisten?.()
+}
+
 /** 打开本项目 GitHub 页面（后端会再次校验域名） */
 export async function openUrl(url: string): Promise<void> {
   await invoke('open_url', { url })

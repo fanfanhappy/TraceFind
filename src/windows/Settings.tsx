@@ -31,6 +31,8 @@ import {
   patchSettings,
   restartOnboarding,
   checkUpdate,
+  installUpdate,
+  onUpdateProgress,
   openUrl,
   type UpdateStatus,
   quitApp,
@@ -80,6 +82,17 @@ export function Settings() {
   const [update, setUpdate] = useState<UpdateStatus | null>(null)
   const [checking, setChecking] = useState(false)
   const [updateError, setUpdateError] = useState('')
+  const [installing, setInstalling] = useState<{ phase: 'download' | 'install'; pct: number } | null>(null)
+  const [installError, setInstallError] = useState('')
+
+  useEffect(
+    () =>
+      onUpdateProgress(({ downloaded, total }) => {
+        const pct = total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : 0
+        setInstalling((current) => (current ? { ...current, pct } : current))
+      }),
+    [],
+  )
 
   const runCheck = useCallback(async () => {
     setChecking(true)
@@ -1015,10 +1028,35 @@ export function Settings() {
                               : `当前 v${info?.version ?? '0.1.0'}，只读取 GitHub 的公开版本信息`}
                     </span>
                   </span>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {update?.checked && update.available && (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    {update?.checked && update.available && installing && (
+                      <span className="setting-row__desc">
+                        {installing.phase === 'install'
+                          ? '正在替换程序，即将重启…'
+                          : `正在下载 ${installing.pct}%`}
+                      </span>
+                    )}
+                    {update?.checked && update.available && !installing && (
                       <>
-                        <button type="button" className="linkbtn linkbtn--primary" onClick={() => void openUrl(update.url)}>
+                        <button
+                          type="button"
+                          className="linkbtn linkbtn--primary"
+                          title="下载并校验 sha256，然后替换当前程序并重启"
+                          disabled={update.sha256.length !== 64}
+                          onClick={() => {
+                            setInstallError('')
+                            setInstalling({ phase: 'download', pct: 0 })
+                            void installUpdate(update.url, update.sha256)
+                              .then(() => setInstalling({ phase: 'install', pct: 100 }))
+                              .catch((err) => {
+                                setInstalling(null)
+                                setInstallError(String(err))
+                              })
+                          }}
+                        >
+                          下载并安装
+                        </button>
+                        <button type="button" className="linkbtn" onClick={() => void openUrl(update.url)}>
                           查看下载
                         </button>
                         <button
@@ -1038,6 +1076,13 @@ export function Settings() {
                     </button>
                   </div>
                 </div>
+                {installError && (
+                  <div className="setting-row">
+                    <span className="setting-row__desc" style={{ color: 'var(--danger)' }}>
+                      安装失败：{installError}；可以改用「查看下载」手动更新。
+                    </span>
+                  </div>
+                )}
 
                 <div className="setting-row">
                   <span className="setting-row__text">

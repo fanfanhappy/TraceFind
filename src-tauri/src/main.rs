@@ -250,6 +250,7 @@ fn main() {
             commands::complete_onboarding,
         commands::restart_onboarding,
         commands::check_update,
+        commands::install_update,
         commands::open_url,
             commands::patch_settings,
             commands::set_window_dark,

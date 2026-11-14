@@ -244,6 +244,183 @@ fn is_leap(year: i64) -> bool {
     (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
 }
 
+/// 下载完成、已校验并解出新的 exe，等脚本替换
+pub struct Staged {
+    pub dir: std::path::PathBuf,
+    pub zip: std::path::PathBuf,
+    pub exe: std::path::PathBuf,
+}
+
+/// 下载 zip、校验 sha256、解出 TraceFind.exe
+pub fn stage<F>(url: &str, sha256: &str, progress: F) -> Result<Staged, String>
+where
+    F: Fn(u64, u64),
+{
+    use sha2::{Digest, Sha256};
+    use std::io::{Read, Write};
+
+    if !url.starts_with("https://github.com/fanfanhappy/TraceFind/releases/") {
+        return Err("更新地址不是本项目的发布页".to_string());
+    }
+    if sha256.trim().len() != 64 {
+        return Err("缺少可校验的 sha256，请手动下载".to_string());
+    }
+
+    let dir = std::env::temp_dir().join(format!("tracefind-update-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).map_err(|err| format!("无法创建临时目录：{err}"))?;
+    let zip_path = dir.join("update.zip");
+    let exe_path = dir.join("TraceFind.new.exe");
+
+    let agent = ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_secs(600))
+        .build();
+    let response = agent
+        .get(url)
+        .set("User-Agent", "TraceFind-updater")
+        .call()
+        .map_err(|err| format!("下载失败：{err}"))?;
+    let total = response
+        .header("content-length")
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0);
+
+    let mut reader = response.into_reader();
+    let mut file = std::fs::File::create(&zip_path).map_err(|err| format!("无法写入临时文件：{err}"))?;
+    let mut hasher = Sha256::new();
+    let mut downloaded = 0u64;
+    let mut buffer = vec![0u8; 64 * 1024];
+    let mut last_reported = 0u64;
+    progress(0, total);
+    loop {
+        let read = reader.read(&mut buffer).map_err(|err| format!("下载中断：{err}"))?;
+        if read == 0 {
+            break;
+        }
+        file.write_all(&buffer[..read])
+            .map_err(|err| format!("写入失败：{err}"))?;
+        hasher.update(&buffer[..read]);
+        downloaded += read as u64;
+        if downloaded - last_reported >= 256 * 1024 || (total > 0 && downloaded == total) {
+            last_reported = downloaded;
+            progress(downloaded, total);
+        }
+    }
+    drop(file);
+
+    let digest = format!("{:x}", hasher.finalize());
+    if !digest.eq_ignore_ascii_case(sha256.trim()) {
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err(format!("校验失败（下载 {digest}）"));
+    }
+
+    let archive_file = std::fs::File::open(&zip_path).map_err(|err| format!("无法读取压缩包：{err}"))?;
+    let mut archive =
+        zip::ZipArchive::new(archive_file).map_err(|err| format!("压缩包无效：{err}"))?;
+    let mut found = None;
+    for index in 0..archive.len() {
+        let Ok(entry) = archive.by_index(index) else { continue };
+        if entry.name().to_ascii_lowercase().ends_with("tracefind.exe") {
+            found = Some(index);
+            break;
+        }
+    }
+    let Some(index) = found else {
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err("压缩包里没有 TraceFind.exe".to_string());
+    };
+    let mut entry = archive.by_index(index).map_err(|err| err.to_string())?;
+    let mut exe_bytes = Vec::with_capacity(48 * 1024 * 1024);
+    entry
+        .read_to_end(&mut exe_bytes)
+        .map_err(|err| format!("解压失败：{err}"))?;
+    // 基本校验：PE 头 + 大小下限，防止把半截文件换上去
+    if exe_bytes.len() < 10 * 1024 * 1024 || exe_bytes.get(0..2) != Some(b"MZ") {
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err("解出的程序不完整".to_string());
+    }
+    std::fs::write(&exe_path, &exe_bytes).map_err(|err| format!("写入新程序失败：{err}"))?;
+
+    Ok(Staged {
+        dir,
+        zip: zip_path,
+        exe: exe_path,
+    })
+}
+
+/// 生成并在后台启动"等进程退出→替换→重启"的脚本
+pub fn schedule_replace(staged: &Staged, current_exe: &std::path::Path) -> Result<(), String> {
+    let script = staged.dir.join("apply.ps1");
+    // 单引号包裹，路径里的单引号翻倍转义（先转义再包，顺序不能反）
+    let quote = |path: &std::path::Path| {
+        format!("'{}'", path.display().to_string().replace('\'', "''"))
+    };
+    let content = format!(
+        r#"$ErrorActionPreference = 'Stop'
+$pidToWait = {pid}
+$exe = {exe}
+$new = {new}
+$zip = {zip}
+$log = {log}
+$started = {started}
+try {{
+  "started $(Get-Date -Format o)" | Out-File -FilePath $started -Encoding utf8
+  while (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 200 }}
+  Start-Sleep -Milliseconds 600
+  $backup = "$($exe).old"
+  if (Test-Path $backup) {{ Remove-Item $backup -Force }}
+  Move-Item $exe $backup -Force
+  Copy-Item $new $exe -Force
+  Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe)
+  Remove-Item $zip -Force -ErrorAction SilentlyContinue
+  Remove-Item $new -Force -ErrorAction SilentlyContinue
+  "ok $(Get-Date -Format o)" | Out-File -FilePath $log -Encoding utf8
+}} catch {{
+  "fail: $_" | Out-File -FilePath $log -Encoding utf8
+  if (-not (Test-Path $exe) -and (Test-Path $backup)) {{ Move-Item $backup $exe -Force }}
+}}
+"#,
+        pid = std::process::id(),
+        exe = quote(current_exe),
+        new = quote(&staged.exe),
+        zip = quote(&staged.zip),
+        log = quote(&staged.dir.join("apply.log")),
+        started = quote(&staged.dir.join("apply.started")),
+    );
+    std::fs::write(&script, content).map_err(|err| format!("无法写入更新脚本：{err}"))?;
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                &script.to_string_lossy(),
+            ])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|err| format!("无法启动更新脚本：{err}"))?;
+
+        // 握个手：脚本真的跑起来才让应用退出，否则会变成"更新后打不开"
+        let marker = staged.dir.join("apply.started");
+        for _ in 0..30 {
+            if marker.exists() {
+                return Ok(());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        Err("更新脚本未能启动，已取消更新".to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        Err("仅 Windows 支持原地更新".to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

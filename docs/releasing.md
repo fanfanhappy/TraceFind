@@ -84,6 +84,15 @@ src-tauri/tauri.conf.json  "version": "2.0.0"
 - 引导页这类会显示系统目录的界面，截图前把路径替换成 `C:\Users\demo\…`，并在 README 标注"示例路径"
 - 详见 [contributing.md](contributing.md) 的自查清单
 
+## 原地更新的约束
+
+2.2.0 起内置「下载并安装」，靠替换 exe 实现，因此：
+
+- 版本号里**必须**继续产出 `TraceFind-<版本>-win64.zip` 与 `.sha256`，名字要和脚本预期一致
+- `.sha256` 的内容必须是 zip 的哈希（脚本只认第一段）
+- Release 资产必须包含 zip，否则一键更新会在下载阶段失败
+- 便携版放在受保护目录时更新会失败——这是设计取舍，失败时保留旧版
+
 ## 将来接自动更新时
 
 `tauri-plugin-updater` 会让 release 从"新闻"变成分发基础设施：更新检查读的就是 release 资产。届时规则改为：

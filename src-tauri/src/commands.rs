@@ -118,6 +118,38 @@ pub async fn check_update<R: Runtime>(
     })
 }
 
+/// 下载并安装更新：校验哈希后替换 exe，重启自身。
+/// 注意：只支持便携版放在用户可写目录；Program Files 下需要管理员权限，会失败并保留旧版。
+#[tauri::command]
+pub async fn install_update<R: Runtime>(
+    app: AppHandle<R>,
+    url: String,
+    sha256: String,
+) -> Result<(), String> {
+    let emit_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let current = std::env::current_exe().map_err(|err| format!("无法定位当前程序：{err}"))?;
+        let staged = crate::update::stage(&url, &sha256, |downloaded, total| {
+            let _ = emit_app.emit(
+                "update:progress",
+                serde_json::json!({ "downloaded": downloaded, "total": total }),
+            );
+        })?;
+        crate::update::schedule_replace(&staged, &current)?;
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|err| err.to_string())??;
+
+    // 给脚本一点启动时间，再干净退出
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(800));
+        quit(&handle);
+    });
+    Ok(())
+}
+
 /// 打开链接（只允许本项目的 GitHub 页面，避免被当成通用启动器）
 #[tauri::command]
 pub fn open_url(url: String) -> Result<(), String> {

@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/fanfanhappy/TraceFind/releases/latest">下载 Windows 版</a> ·
-  <a href="docs/release-2.1.1.md">2.0.0 发布说明</a> ·
+  <a href="docs/release-2.2.0.md">2.0.0 发布说明</a> ·
   <a href="docs/DEVELOPMENT.md">开发指南</a> ·
   <a href="docs/DATA-AND-PRIVACY.md">数据与隐私</a>
 </p>
@@ -96,7 +96,7 @@
 
 从 AURA Search 升级时，请先退出旧版，再运行 TraceFind。迁移条件和数据位置见 [迁移说明](docs/migrating.md)。
 
-程序会**每天检查一次新版本**（可在设置 → 关于关闭）：状态栏出现「新版本 x.y.z」时点一下即可打开发布页；不想升级可以「跳过此版本」。检查只读取 GitHub 的公开版本信息，不上传本地数据，详见[数据与隐私](docs/DATA-AND-PRIVACY.md)。
+程序会**每天检查一次新版本**（可在设置 → 关于关闭）：状态栏出现「新版本 x.y.z」，到 **设置 → 关于** 点「下载并安装」即可完成下载、校验、替换与重启；不想升级可以「跳过此版本」。更新只从本项目发布页下载并校验 sha256，不上传本地数据，详见[数据与隐私](docs/DATA-AND-PRIVACY.md)。
 
 ### 第一次使用
 
@@ -195,7 +195,7 @@ pnpm dev
 ## 项目文档
 
 - [开发、构建与打包](docs/DEVELOPMENT.md)
-- [TraceFind 2.0.0 发布说明](docs/release-2.1.1.md)
+- [TraceFind 2.0.0 发布说明](docs/release-2.2.0.md)
 - [贡献与截图规范](docs/contributing.md)
 - [发布流程与验收清单](docs/releasing.md)
 - [历史变更](docs/changelog-0.6.0.md)
