@@ -11,7 +11,10 @@ interface Props {
   desktop: boolean
   index: IndexStatus
   status?: string
+  /** 有新版本时显示提示 */
+  updateVersion?: string | null
   onOpenSettings: () => void
+  onOpenUpdate?: () => void
 }
 
 function compactCount(value: number): string {
@@ -45,7 +48,9 @@ export function StatusBar({
   desktop,
   index,
   status,
+  updateVersion,
   onOpenSettings,
+  onOpenUpdate,
 }: Props) {
   return (
     <footer className="statusbar">
@@ -79,6 +84,18 @@ export function StatusBar({
 
       <div className="statusbar__trail">
         {status && <span role="status">{status}</span>}
+        {updateVersion && (
+          <button
+            type="button"
+            className="pill"
+            data-kind="ok"
+            title={`有新版本 ${updateVersion}，点击查看发布说明`}
+            onClick={onOpenUpdate}
+          >
+            <span className="pill__dot" aria-hidden />
+            新版本 {updateVersion}
+          </button>
+        )}
         {desktop && hotkeyFallback && (
           <button
             type="button"

@@ -16,6 +16,7 @@ mod scanner;
 mod secrets;
 mod semantic;
 mod settings;
+mod update;
 mod state;
 mod tray_manager;
 mod watcher;
@@ -262,6 +263,8 @@ fn main() {
             commands::suggested_roots,
             commands::complete_onboarding,
         commands::restart_onboarding,
+        commands::check_update,
+        commands::open_url,
             commands::patch_settings,
             commands::set_window_dark,
             commands::set_hold_visible,

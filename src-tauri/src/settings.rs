@@ -46,6 +46,12 @@ pub struct AppSettings {
     #[serde(default)]
     pub cloud_key: String,
     pub ai_enabled: bool,
+    /// 启动时自动检查新版本
+    pub check_updates: bool,
+    /// 上次检查时间（Unix 秒），用于节流
+    pub last_update_check: i64,
+    /// 用户选择"跳过"的版本，不再提示
+    pub skipped_version: String,
 }
 
 impl Default for AppSettings {
@@ -75,6 +81,9 @@ impl Default for AppSettings {
             assistant_model: "gpt-4o-mini".to_string(),
             cloud_key: String::new(),
             ai_enabled: false,
+            check_updates: true,
+            last_update_check: 0,
+            skipped_version: String::new(),
         }
     }
 }
@@ -106,6 +115,9 @@ pub struct SettingsPatch {
     pub assistant_model: Option<String>,
     /// 明文 API Key，落盘前会做 DPAPI 加密
     pub cloud_api_key: Option<String>,
+    pub check_updates: Option<bool>,
+    pub last_update_check: Option<i64>,
+    pub skipped_version: Option<String>,
     pub ai_enabled: Option<bool>,
 }
 

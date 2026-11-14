@@ -47,6 +47,12 @@ export interface AppSettings {
   assistantEnabled: boolean
   /** 问答模型名 */
   assistantModel: string
+  /** 启动时自动检查新版本 */
+  checkUpdates: boolean
+  /** 上次检查时间（Unix 秒） */
+  lastUpdateCheck: number
+  /** 用户跳过的版本 */
+  skippedVersion: string
   /** 仅用于写入：明文 Key，后端会 DPAPI 加密后落盘，不会回传 */
   cloudApiKey?: string
   aiEnabled: boolean
@@ -94,6 +100,9 @@ export const defaultSettings: AppSettings = {
   assistantEnabled: false,
   assistantModel: 'gpt-4o-mini',
   aiEnabled: false,
+  checkUpdates: true,
+  lastUpdateCheck: 0,
+  skippedVersion: '',
 }
 
 export type IndexState = 'idle' | 'scanning' | 'paused' | 'ready' | 'demo'
@@ -209,6 +218,43 @@ export async function pickFolders(): Promise<string[]> {
   })
   if (!picked) return []
   return Array.isArray(picked) ? picked : [picked]
+}
+
+export interface UpdateStatus {
+  checked: boolean
+  available: boolean
+  current: string
+  latest: string
+  url: string
+  notes: string
+  publishedAt: number
+  sizeBytes: number
+  sha256: string
+  error: string | null
+}
+
+/** 检查新版本；record=false 时不更新"上次检查时间"（手动检查用 false 也可以） */
+export async function checkUpdate(record = true): Promise<UpdateStatus> {
+  if (!isDesktop) {
+    return {
+      checked: false,
+      available: false,
+      current: 'dev',
+      latest: '',
+      url: '',
+      notes: '',
+      publishedAt: 0,
+      sizeBytes: 0,
+      sha256: '',
+      error: '仅桌面端支持',
+    }
+  }
+  return invoke<UpdateStatus>('check_update', { record })
+}
+
+/** 打开本项目 GitHub 页面（后端会再次校验域名） */
+export async function openUrl(url: string): Promise<void> {
+  await invoke('open_url', { url })
 }
 
 /** 重新观看首次使用引导（保留已有目录与索引） */

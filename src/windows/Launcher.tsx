@@ -10,6 +10,8 @@ import { StatusBar } from '../components/StatusBar'
 import { PreviewDrawer } from '../components/PreviewDrawer'
 import { Onboarding } from '../components/Onboarding'
 import {
+  checkUpdate,
+  openUrl,
   defaultSettings,
   frontendReady,
   getIndexStatus,
@@ -80,6 +82,7 @@ export function Launcher() {
   const [hotkeyFallback, setHotkeyFallback] = useState(false)
   const [ask, setAsk] = useState<{ question: string; answer: Awaited<ReturnType<typeof askFiles>> | null; loading: boolean; error: string | null } | null>(null)
   const [newHits, setNewHits] = useState<{ count: number; first: string } | null>(null)
+  const [update, setUpdate] = useState<{ latest: string; url: string } | null>(null)
   // 这批结果对应的「查询 + 范围」，用来判断列表是否已经过期
   const [resultsKey, setResultsKey] = useState('')
   const [revision, setRevision] = useState(0)
@@ -265,6 +268,24 @@ export function Launcher() {
   useEffect(() => {
     hitsRef.current = hits
   }, [hits])
+
+  // 启动时检查更新：默认 24 小时一次，可在设置里关掉
+  useEffect(() => {
+    if (!isDesktop || !ready || !settings.checkUpdates) return
+    const now = Math.floor(Date.now() / 1000)
+    if (now - settings.lastUpdateCheck < 86400) return
+    let alive = true
+    void checkUpdate(true)
+      .then((status) => {
+        if (!alive || !status.checked || !status.available) return
+        if (status.latest === settings.skippedVersion) return
+        setUpdate({ latest: status.latest, url: status.url })
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [ready, settings.checkUpdates, settings.lastUpdateCheck, settings.skippedVersion])
 
   function mergeSemanticHits(extra: SearchHit[]) {
     const current = hitsRef.current
@@ -723,7 +744,11 @@ export function Launcher() {
         desktop={isDesktop}
         index={index}
         status={status}
+        updateVersion={update?.latest ?? null}
         onOpenSettings={() => void openSettingsWindow()}
+        onOpenUpdate={() => {
+          if (update) void openUrl(update.url)
+        }}
       />
 
       {isDesktop && ready && !settings.onboardingComplete && (

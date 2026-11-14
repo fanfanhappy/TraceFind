@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   ArrowLeft,
   FolderSearch,
@@ -30,6 +30,9 @@ import {
   pauseIndex,
   patchSettings,
   restartOnboarding,
+  checkUpdate,
+  openUrl,
+  type UpdateStatus,
   quitApp,
   rebuildContent,
   rebuildSemantic,
@@ -75,6 +78,23 @@ export function Settings() {
   const [savingHotkey, setSavingHotkey] = useState(false)
   const [hotkeyError, setHotkeyError] = useState('')
   const [loaded, setLoaded] = useState(false)
+  const [update, setUpdate] = useState<UpdateStatus | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [updateError, setUpdateError] = useState('')
+
+  const runCheck = useCallback(async () => {
+    setChecking(true)
+    setUpdateError('')
+    try {
+      const status = await checkUpdate(false)
+      setUpdate(status)
+      if (status.error) setUpdateError(status.error)
+    } catch (err) {
+      setUpdateError(String(err))
+    } finally {
+      setChecking(false)
+    }
+  }, [])
   const [indexing, setIndexing] = useState<IndexStatus>({
     state: 'idle',
     files: 0,
@@ -973,7 +993,7 @@ export function Settings() {
                 <div className="setting-row">
                   <dl className="kv" style={{ width: '100%' }}>
                     <dt>版本</dt>
-                    <dd>v{info?.version ?? '0.1.0'}（模块一 / M1.1–M1.3）</dd>
+                    <dd>v{info?.version ?? '0.1.0'}</dd>
                     <dt>运行环境</dt>
                     <dd>{info?.platform ?? '—'}</dd>
                     <dt>窗口材质</dt>
@@ -983,6 +1003,64 @@ export function Settings() {
                     <dt>配置目录</dt>
                     <dd title={info?.dataDir}>{info?.dataDir ?? '—'}</dd>
                   </dl>
+                </div>
+              </div>
+
+              <div className="setting-group">
+                <div className="setting-row">
+                  <span className="setting-row__text">
+                    <span className="setting-row__title">检查更新</span>
+                    <span className="setting-row__desc">
+                      {checking
+                        ? '正在检查…'
+                        : updateError
+                          ? updateError
+                          : update?.checked && update.available
+                            ? `发现新版本 ${update.latest}（当前 ${update.current}）`
+                            : update?.checked
+                              ? '已是最新版本'
+                              : `当前 v${info?.version ?? '0.1.0'}，只读取 GitHub 的公开版本信息`}
+                    </span>
+                  </span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {update?.checked && update.available && (
+                      <>
+                        <button type="button" className="linkbtn linkbtn--primary" onClick={() => void openUrl(update.url)}>
+                          查看下载
+                        </button>
+                        <button
+                          type="button"
+                          className="linkbtn"
+                          title="不再提示这个版本"
+                          onClick={() => {
+                            void patchSettings({ skippedVersion: update.latest }).then(setSettings)
+                          }}
+                        >
+                          跳过此版本
+                        </button>
+                      </>
+                    )}
+                    <button type="button" className="linkbtn" disabled={checking} onClick={() => void runCheck()}>
+                      {checking ? '检查中…' : '检查'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="setting-row">
+                  <span className="setting-row__text">
+                    <span className="setting-row__title">启动时自动检查</span>
+                    <span className="setting-row__desc">每天最多一次；关闭后只在手动点击时检查。</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="switch"
+                    role="switch"
+                    aria-checked={settings.checkUpdates}
+                    onClick={() => {
+                      void patchSettings({ checkUpdates: !settings.checkUpdates }).then(setSettings)
+                    }}
+                  >
+                  </button>
                 </div>
               </div>
 

@@ -68,6 +68,49 @@ pub fn complete_onboarding<R: Runtime>(
     Ok(current)
 }
 
+/// 检查新版本：只发一个 GET 到 GitHub 的公开接口，不上传任何本地信息。
+#[tauri::command]
+pub fn check_update<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    record: Option<bool>,
+) -> crate::update::UpdateStatus {
+    let current = env!("CARGO_PKG_VERSION");
+    let status = crate::update::check(current);
+
+    // 只有真的问到远端才记录时间，离线时下次启动还会再试
+    if status.checked && record.unwrap_or(true) {
+        let mut settings = state.settings.lock().unwrap_or_else(|err| err.into_inner());
+        settings.last_update_check = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let _ = settings::save(&app, &settings);
+    }
+    status
+}
+
+/// 打开链接（只允许本项目的 GitHub 页面，避免被当成通用启动器）
+#[tauri::command]
+pub fn open_url(url: String) -> Result<(), String> {
+    let allowed = url.starts_with("https://github.com/fanfanhappy/TraceFind");
+    if !allowed {
+        return Err("只允许打开本项目的 GitHub 页面".to_string());
+    }
+    #[cfg(windows)]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &url])
+            .spawn()
+            .map_err(|err| err.to_string())?;
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        Err("仅 Windows 支持".to_string())
+    }
+}
+
 /// 重新播放首次使用引导：只清标记，不动已有索引与目录。
 #[tauri::command]
 pub fn restart_onboarding<R: Runtime>(
