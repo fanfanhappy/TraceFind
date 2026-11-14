@@ -488,10 +488,12 @@ export function Launcher() {
       return
     }
 
-    // 不想先按 Tab 的话：Ctrl+Space 直接在输入框里开/关预览
-    if (event.key === ' ' && (event.ctrlKey || target.id === 'results')) {
+    // 空格：开/关预览。Shift+Space 才输入真正的空格（多词查询用得上），
+    // 中文输入法组合期间上面已提前返回，不会抢输入。
+    if (event.key === ' ' && !event.shiftKey && !event.metaKey && !event.altKey) {
+      if (event.repeat) return
+      if (!previewOpen && !hits[activeIndex]) return
       event.preventDefault()
-      if (event.repeat || !hits[activeIndex]) return
       if (isStale()) {
         setStatus('结果还在更新，稍等一下再预览')
         return

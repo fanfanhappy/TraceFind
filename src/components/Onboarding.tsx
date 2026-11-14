@@ -208,7 +208,7 @@ export function Onboarding({ settings, hotkey, onDone }: Props) {
               打开
             </span>
             <span>
-              <kbd>Ctrl + Space</kbd>
+              <kbd>Space</kbd>
               预览
             </span>
           </div>
