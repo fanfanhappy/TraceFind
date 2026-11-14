@@ -1,22 +1,23 @@
-//! 系统托盘：左键唤起/隐藏，右键菜单提供搜索、设置、索引控制、更新检查与退出。
+//! 系统托盘：左键唤起/隐藏；右键弹出与应用同风格的自绘面板。
 
-use std::sync::atomic::Ordering;
-
-use tauri::menu::{CheckMenuItem, Menu, MenuBuilder, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Rect, Runtime, WebviewUrl,
+    WebviewWindow, WebviewWindowBuilder,
+};
 
 use crate::state::AppState;
-use crate::{autostart_manager, lifecycle, windowing};
+use crate::lifecycle;
 
 pub const TRAY_ID: &str = "tracefind-tray";
+const MENU_LABEL: &str = "tray-menu";
+const MENU_WIDTH: f64 = 268.0;
+const MENU_HEIGHT: f64 = 420.0;
 
 /// 12,345 → 1.2 万；不到一万就原样显示
 fn compact_count(value: u64) -> String {
     if value >= 10_000 {
         format!("{:.1} 万", value as f64 / 10_000.0)
-    } else if value >= 1_000 {
-        format!("{value}")
     } else {
         value.to_string()
     }
@@ -52,50 +53,82 @@ fn tooltip<R: Runtime>(app: &AppHandle<R>) -> String {
     }
 }
 
-fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
-    let hotkey = hotkey_label(app);
-    let suffix = if hotkey.is_empty() {
-        String::new()
-    } else {
-        format!("（{hotkey}）")
-    };
-
-    let state = app.state::<AppState>();
-    let scanning = state.scan_running.load(Ordering::SeqCst);
-    let paused = state.scan_paused.load(Ordering::SeqCst);
-
-    let show = MenuItem::with_id(app, "show", format!("打开搜索{suffix}"), true, None::<&str>)?;
-    let settings = MenuItem::with_id(app, "settings", "偏好设置…", true, None::<&str>)?;
-    let pause_label = if paused { "继续索引" } else { "暂停索引" };
-    let pause = MenuItem::with_id(app, "pause", pause_label, scanning || paused, None::<&str>)?;
-    let check_update = MenuItem::with_id(app, "check_update", "检查更新…", true, None::<&str>)?;
-    let autostart = CheckMenuItem::with_id(
-        app,
-        "autostart",
-        "开机启动",
-        true,
-        autostart_manager::is_enabled(app),
-        None::<&str>,
-    )?;
-    let open_data = MenuItem::with_id(app, "open_data", "打开数据目录", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "退出 TraceFind", true, None::<&str>)?;
-
-    MenuBuilder::new(app)
-        .item(&show)
-        .item(&settings)
-        .separator()
-        .item(&pause)
-        .item(&check_update)
-        .separator()
-        .item(&autostart)
-        .item(&open_data)
-        .separator()
-        .item(&quit)
+fn ensure_menu_window<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>> {
+    if let Some(window) = app.get_webview_window(MENU_LABEL) {
+        return Some(window);
+    }
+    WebviewWindowBuilder::new(app, MENU_LABEL, WebviewUrl::App("tray-menu.html".into()))
+        .title("TraceFind")
+        .inner_size(MENU_WIDTH, MENU_HEIGHT)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .decorations(false)
+        .transparent(true)
+        .shadow(true)
+        .skip_taskbar(true)
+        .always_on_top(true)
+        .focused(false)
+        .visible(false)
         .build()
+        .ok()
+}
+
+/// 右键：贴着托盘图标上方弹出；再点一次收起
+fn toggle_menu<R: Runtime>(app: &AppHandle<R>, rect: Rect) {
+    let Some(window) = ensure_menu_window(app) else {
+        crate::aura_log!("托盘面板创建失败");
+        return;
+    };
+    if window.is_visible().unwrap_or(false) {
+        let _ = window.hide();
+        return;
+    }
+
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let anchor = rect.position.to_physical::<i32>(scale);
+    let anchor_size = rect.size.to_physical::<u32>(scale);
+    let outer = window
+        .outer_size()
+        .unwrap_or(PhysicalSize::new(MENU_WIDTH as u32, MENU_HEIGHT as u32));
+
+    // 默认锚在托盘图标右上方
+    let mut x = anchor.x + anchor_size.width as i32 - outer.width as i32;
+    let mut y = anchor.y - outer.height as i32 - 8;
+
+    // 限制在托盘所在显示器的工作区里
+    if let Ok(monitors) = window.available_monitors() {
+        let hit = monitors.into_iter().find(|monitor| {
+            let origin = monitor.position();
+            let size = monitor.size();
+            anchor.x >= origin.x
+                && anchor.x < origin.x + size.width as i32
+                && anchor.y >= origin.y
+                && anchor.y < origin.y + size.height as i32
+        });
+        if let Some(monitor) = hit {
+            let origin = monitor.position();
+            let size = monitor.size();
+            let max_x = origin.x + size.width as i32 - outer.width as i32 - 8;
+            let max_y = origin.y + size.height as i32 - outer.height as i32 - 8;
+            x = x.clamp(origin.x + 8, max_x.max(origin.x + 8));
+            y = y.clamp(origin.y + 8, max_y.max(origin.y + 8));
+        }
+    }
+
+    let _ = window.set_position(PhysicalPosition::new(x, y));
+    let _ = window.emit("tray:open", ());
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+pub fn hide_menu<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window(MENU_LABEL) {
+        let _ = window.hide();
+    }
 }
 
 pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    let menu = build_menu(app)?;
     // 用 128px 源图，高 DPI 下缩小时更清晰
     let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png"))?;
     let hint = tooltip(app);
@@ -103,87 +136,29 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .tooltip(hint)
-        .menu(&menu)
         .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| {
-            // 菜单弹出期间主窗口必然失焦，先抑制"失焦即隐藏"
-            app.state::<AppState>().suppress_hide_for(600);
-            match event.id.as_ref() {
-                "show" => lifecycle::show(app),
-                "settings" => windowing::ensure_settings(app),
-                "pause" => {
-                    if app.state::<AppState>().scan_paused.load(Ordering::SeqCst) {
-                        crate::scanner::resume(app);
-                    } else {
-                        crate::scanner::pause(app);
-                    }
-                    refresh(app);
-                }
-                "check_update" => {
-                    // 托盘里不弹窗：有更新就抬出主窗口并标出提示，没有就发一条状态
-                    let handle = app.clone();
-                    std::thread::spawn(move || {
-                        let status = crate::update::check(env!("CARGO_PKG_VERSION"));
-                        if status.checked && status.available {
-                            let _ = handle.emit(
-                                "aura:update-available",
-                                serde_json::json!({
-                                    "latest": status.latest,
-                                    "url": status.url,
-                                    "sha256": status.sha256,
-                                }),
-                            );
-                            lifecycle::show(&handle);
-                        } else if status.checked {
-                            let _ = handle.emit("aura:tray-status", "已是最新版本");
-                        } else {
-                            let _ = handle.emit(
-                                "aura:tray-status",
-                                status.error.unwrap_or_else(|| "检查更新失败".to_string()),
-                            );
-                        }
-                    });
-                }
-                "autostart" => {
-                    let state = app.state::<AppState>();
-                    let enabled = !state.settings_snapshot().autostart;
-                    if autostart_manager::set(app, enabled) {
-                        let mut settings = state.settings_snapshot();
-                        settings.autostart = enabled;
-                        *state
-                            .settings
-                            .lock()
-                            .unwrap_or_else(|poisoned| poisoned.into_inner()) = settings.clone();
-                        let _ = crate::settings::save(app, &settings);
-                        let _ = app.emit("aura:settings-changed", crate::settings::redacted(settings));
-                    }
-                    refresh(app);
-                }
-                "open_data" => {
-                    let dir = app
-                        .state::<AppState>()
-                        .index_path
-                        .parent()
-                        .map(|path| path.to_path_buf());
-                    if let Some(dir) = dir {
-                        let _ = std::process::Command::new("explorer").arg(dir).spawn();
-                    }
-                }
-                "quit" => crate::commands::quit(app),
-                _ => {}
-            }
-        })
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                tray.app_handle()
-                    .state::<AppState>()
-                    .suppress_hide_for(600);
-                lifecycle::toggle(tray.app_handle());
+            let app = tray.app_handle();
+            match event {
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } => {
+                    app.state::<AppState>().suppress_hide_for(600);
+                    lifecycle::toggle(app);
+                }
+                TrayIconEvent::Click {
+                    button: MouseButton::Right,
+                    button_state: MouseButtonState::Up,
+                    rect,
+                    ..
+                } => {
+                    // 面板弹出时主窗口会失焦，先抑制"失焦即隐藏"
+                    app.state::<AppState>().suppress_hide_for(1200);
+                    toggle_menu(app, rect);
+                }
+                _ => {}
             }
         })
         .build(app)?;
@@ -192,14 +167,20 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     Ok(())
 }
 
-/// 菜单勾选/索引状态变化后重建菜单，并同步托盘提示
+/// 索引状态变化后同步托盘提示，并让面板重新读一次数据
 pub fn refresh<R: Runtime>(app: &AppHandle<R>) {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        if let Ok(menu) = build_menu(app) {
-            let _ = tray.set_menu(Some(menu));
-        }
         let hint = tooltip(app);
         let _ = tray.set_tooltip(Some(hint.clone()));
+        if app
+            .get_webview_window(MENU_LABEL)
+            .map(|window| window.is_visible().unwrap_or(false))
+            .unwrap_or(false)
+        {
+            let _ = app.emit("tray:open", ());
+        }
         crate::aura_log!("托盘已刷新：{hint}");
     }
 }
+
+

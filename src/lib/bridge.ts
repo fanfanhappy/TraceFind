@@ -295,6 +295,26 @@ export function onTrayStatus(cb: (text: string) => void): () => void {
   return () => unlisten?.()
 }
 
+/** 托盘面板每次弹出时触发，用来刷新数据 */
+export function onTrayOpen(cb: () => void): Promise<() => void> {
+  return listen('tray:open', () => cb())
+}
+
+/** 收起托盘面板 */
+export async function hideTrayMenu(): Promise<void> {
+  await invoke('hide_tray_menu')
+}
+
+/** 切换开机启动，返回最新设置 */
+export async function toggleAutostart(): Promise<AppSettings> {
+  return invoke<AppSettings>('toggle_autostart')
+}
+
+/** 在资源管理器里打开数据目录 */
+export async function openDataDir(): Promise<void> {
+  await invoke('open_data_dir')
+}
+
 /** 打开本项目 GitHub 页面（后端会再次校验域名） */
 export async function openUrl(url: string): Promise<void> {
   await invoke('open_url', { url })

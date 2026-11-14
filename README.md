@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/fanfanhappy/TraceFind/releases/latest">下载 Windows 版</a> ·
-  <a href="docs/release-2.6.0.md">2.0.0 发布说明</a> ·
+  <a href="docs/release-2.7.0.md">2.0.0 发布说明</a> ·
   <a href="docs/DEVELOPMENT.md">开发指南</a> ·
   <a href="docs/DATA-AND-PRIVACY.md">数据与隐私</a>
 </p>
@@ -76,7 +76,7 @@
   </tr>
   <tr>
     <td width="50%"><img src="docs/screens/12-ocr-tag.png" alt="OCR 命中"><br /><sub>图片里的文字也能搜到，并标明来自 OCR</sub></td>
-    <td width="50%"></td>
+    <td width="50%"><img src="docs/screens/16-tray-menu.png" alt="托盘面板"><br /><sub>托盘面板：文件数、快捷键与常用操作</sub></td>
   </tr>
 </table>
 
@@ -195,7 +195,7 @@ pnpm dev
 ## 项目文档
 
 - [开发、构建与打包](docs/DEVELOPMENT.md)
-- [TraceFind 2.0.0 发布说明](docs/release-2.6.0.md)
+- [TraceFind 2.0.0 发布说明](docs/release-2.7.0.md)
 - [贡献与截图规范](docs/contributing.md)
 - [发布流程与验收清单](docs/releasing.md)
 - [历史变更](docs/changelog-0.6.0.md)

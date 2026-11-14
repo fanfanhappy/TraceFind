@@ -150,6 +150,46 @@ pub async fn install_update<R: Runtime>(
     Ok(())
 }
 
+/// 收起托盘面板
+#[tauri::command]
+pub fn hide_tray_menu<R: Runtime>(app: AppHandle<R>) {
+    crate::tray_manager::hide_menu(&app);
+}
+
+/// 切换开机启动，返回最新设置
+#[tauri::command]
+pub fn toggle_autostart<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> AppSettings {
+    let enabled = !state.settings_snapshot().autostart;
+    if crate::autostart_manager::set(&app, enabled) {
+        let mut settings = state.settings_snapshot();
+        settings.autostart = enabled;
+        *state
+            .settings
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = settings.clone();
+        let _ = settings::save(&app, &settings);
+        let _ = app.emit("aura:settings-changed", settings::redacted(settings.clone()));
+    }
+    settings::redacted(state.settings_snapshot())
+}
+
+/// 在资源管理器里打开数据目录
+#[tauri::command]
+pub fn open_data_dir(state: State<'_, AppState>) -> Result<(), String> {
+    let dir = state
+        .index_path
+        .parent()
+        .ok_or_else(|| "找不到数据目录".to_string())?;
+    std::process::Command::new("explorer")
+        .arg(dir)
+        .spawn()
+        .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
 /// 打开链接（只允许本项目的 GitHub 页面，避免被当成通用启动器）
 #[tauri::command]
 pub fn open_url(url: String) -> Result<(), String> {
