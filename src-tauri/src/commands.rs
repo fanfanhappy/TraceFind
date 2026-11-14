@@ -969,38 +969,53 @@ pub fn rebuild_semantic(app: AppHandle<tauri::Wry>, state: State<'_, AppState>) 
     cleared
 }
 
-/// 从问题里抽 2~3 个关键词：去掉常见疑问词与虚词，保留较长的片段
-fn extract_keywords(question: &str) -> String {
+/// 把口语问题拆成可检索的词：中文取二元组，英文取整词，丢掉疑问词。
+/// 例如「这份预算报告里哪个科目超支了」→ ["预算", "报告", "科目", "超支"]
+fn extract_keywords(question: &str) -> Vec<String> {
     const STOPWORDS: &[&str] = &[
         "什么", "怎么", "如何", "为什么", "哪些", "哪个", "是否", "可以", "需要", "我们", "你们",
         "这个", "那个", "一下", "请问", "告诉", "帮我", "资料", "文件", "里面", "关于", "有关",
+        "这份", "那份", "的是", "了吗", "么样", "怎样", "多少",
     ];
 
     let mut terms: Vec<String> = Vec::new();
-    let mut current = String::new();
+    let mut run = String::new();
+    let push_run = |run: &mut String, out: &mut Vec<String>| {
+        let chars: Vec<char> = run.chars().collect();
+        if chars.is_empty() {
+            return;
+        }
+        // 英文/数字整词保留；中文按 2 字滑窗
+        if chars.iter().all(|ch| ch.is_ascii_alphanumeric()) {
+            if chars.len() >= 2 {
+                out.push(run.to_lowercase());
+            }
+        } else {
+            for window in chars.windows(2) {
+                let gram: String = window.iter().collect();
+                if !STOPWORDS.contains(&gram.as_str()) {
+                    out.push(gram);
+                }
+            }
+        }
+        run.clear();
+    };
+
     for ch in question.chars() {
         let keep = ch.is_alphanumeric() || ('\u{4E00}'..='\u{9FFF}').contains(&ch);
         if keep {
-            current.push(ch);
-        } else if !current.is_empty() {
-            terms.push(std::mem::take(&mut current));
+            run.push(ch);
+        } else {
+            push_run(&mut run, &mut terms);
         }
     }
-    if !current.is_empty() {
-        terms.push(current);
-    }
+    push_run(&mut run, &mut terms);
 
-    let mut kept: Vec<String> = Vec::new();
-    for term in terms {
-        if term.chars().count() < 2 || STOPWORDS.contains(&term.as_str()) {
-            continue;
-        }
-        kept.push(term);
-        if kept.len() >= 3 {
-            break;
-        }
-    }
-    kept.join(" ")
+    // 去重并保留前 8 个，避免 FTS 查询过长
+    let mut seen = std::collections::HashSet::new();
+    terms.retain(|term| seen.insert(term.clone()));
+    terms.truncate(8);
+    terms
 }
 
 /* ---------------------------------------------------------- AI 文件助手 */
@@ -1077,16 +1092,25 @@ pub fn ask_files(
             }
         }
 
-        // 口语化问题常常整句匹配不到（"界面配色看着累"），拆成关键词再试
+        // 口语化问题常常整句匹配不到：拆成词逐个召回，再按出现顺序累加
         if chunks.is_empty() {
-            let keywords = extract_keywords(&question);
-            if !keywords.is_empty() {
+            let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+            for keyword in extract_keywords(&question) {
+                if chunks.len() >= top {
+                    break;
+                }
                 if let Ok(hits) =
-                    index::content_hits(&conn, &keywords, scope.as_deref(), top)
+                    index::content_hits(&conn, &keyword, scope.as_deref(), top - chunks.len())
                 {
                     for hit in hits {
+                        if !seen.insert(hit.path.clone()) {
+                            continue;
+                        }
                         if let Some(snippet) = hit.snippet {
                             chunks.push((hit.path, snippet));
+                        }
+                        if chunks.len() >= top {
+                            break;
                         }
                     }
                 }

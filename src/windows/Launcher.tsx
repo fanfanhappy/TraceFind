@@ -382,14 +382,15 @@ export function Launcher() {
       return
     }
 
-    if (event.key === 'Enter' && event.ctrlKey) {
+    // Ctrl+Enter：在资源管理器中定位（不带 Shift）
+    if (event.key === 'Enter' && event.ctrlKey && !event.shiftKey) {
       event.preventDefault()
       if (activeIndex >= 0) revealAt(activeIndex)
       return
     }
 
-    // Ctrl+Enter：对当前问题做检索增强问答
-    if (event.key === 'Enter' && event.ctrlKey && !event.shiftKey) {
+    // Ctrl+Shift+Enter：对当前问题做检索增强问答
+    if (event.key === 'Enter' && event.ctrlKey && event.shiftKey) {
       if (!query.trim()) return
       if (!settings.assistantEnabled) {
         setStatus('AI 文件助手未启用，请到 设置 → AI 与模型 打开')
@@ -488,18 +489,20 @@ export function Launcher() {
         />
 
         <div className="content">
-          <div className="content__head">
-            <span>{query ? '搜索结果' : scope ? '该目录最近使用' : '最近使用'}</span>
-            <span>
-              {query
-                ? `${hits.length} 项`
-                : index.state === 'scanning'
-                  ? `索引中 ${index.scanned}`
-                  : '按 ↓ 浏览'}
-            </span>
-          </div>
+          {!ask && (
+            <div className="content__head">
+              <span>{query ? '搜索结果' : scope ? '该目录最近使用' : '最近使用'}</span>
+              <span>
+                {query
+                  ? `${hits.length} 项`
+                  : index.state === 'scanning'
+                    ? `索引中 ${index.scanned}`
+                    : '按 ↓ 浏览'}
+              </span>
+            </div>
+          )}
 
-          <div className="filters" role="toolbar" aria-label="结果类型筛选">
+          {!ask && (<div className="filters" role="toolbar" aria-label="结果类型筛选">
             {TYPE_FILTERS.map((item) => (
               <button
                 key={item.id}
@@ -524,7 +527,7 @@ export function Launcher() {
                     ? '按大小'
                     : '按相关度'}
             </span>
-          </div>
+          </div>)}
 
           {ask ? (
             <AskPanel

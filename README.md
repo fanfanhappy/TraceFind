@@ -46,6 +46,13 @@
     <td width="50%"><img src="docs/screens/07-settings-ai.png" alt="AI 与模型"><br /><sub>AI 与模型：本地模型或云端接口</sub></td>
   </tr>
 </table>
+## AI 问答
+
+按 `Ctrl + Shift + Enter`（`Ctrl + Enter` 仍是"在资源管理器中定位"）：先本地检索出最相关的几段正文，再交给你配置的云端模型作答，回答里标注 `[1][2]` 引用，来源可展开核对。
+
+<img src="docs/screens/08-ai-ask.png" alt="AI 问答作答与引用">
+
+<img src="docs/screens/09-ai-sources.png" alt="展开来源片段">
 ## 开始使用
 
 1. 从 [GitHub Releases](https://github.com/fanfanhappy/TraceFind/releases) 获取 Windows x64 压缩包，解压后运行 `TraceFind.exe`。程序依赖 **WebView2 Runtime**。
@@ -62,6 +69,7 @@
 | 选择与打开 | `↑` / `↓` 选择，`Enter` 打开 |
 | 快速预览 | `Ctrl + Space` |
 | 在资源管理器中定位 | `Ctrl + Enter` |
+| 问 AI（检索到的正文作答） | `Ctrl + Shift + Enter` |
 | 打开设置 | `Ctrl + ,` |
 | 退出当前层级 | `Esc` |
 
