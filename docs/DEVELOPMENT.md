@@ -21,13 +21,20 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml
 pnpm build:desktop
 ```
 
-Windows Release 产物为 `src-tauri/target/release/tracefind.exe`。从已构建的 EXE 打包 1.1.1：
+Windows Release 产物为 `src-tauri/target/release/tracefind.exe`。打包当前版本（版本号缺省读 `package.json`，发布说明取 `docs/release-<版本>.md`）：
 
 ```powershell
-powershell -File tools/package-release.ps1 -Version 1.1.1
+powershell -File tools/package-release.ps1
 ```
 
-产物位于 `release/`，含 ZIP 和 SHA-256 校验文件。当前打包脚本固定复制 1.1.0 发布说明，打包 1.1.1 时须核对 ZIP 内的 `RELEASE-NOTES.md`。发布脚本使用 GitHub CLI，调用前应显式指定版本。桌面端的索引回归可使用 `tools/run-isolated.ps1`。运行前检查脚本使用的 EXE 路径及隔离目录是否与当前版本一致。
+产物在 `release/`，一次产出两个包：
+
+| 产物 | 用途 |
+|---|---|
+| `TraceFind-<版本>-win64.zip` | 便携版（解压即用），应用内一键更新也从这里下载 |
+| `TraceFind-<版本>-win64-setup.exe` | 安装包：可选安装目录、开始菜单/桌面快捷方式、写入卸载项 |
+
+两者各自带 `.sha256`。安装包由 `tools/build-installer.ps1` 调用 NSIS 编译，首次使用前先跑一次 `npx tauri build --bundles nsis` 让 Tauri 把 NSIS 下载到 `%LOCALAPPDATA%\tauri\NSIS`（`build-installer.ps1` 会复用它）。发布前用 `tools/check-release.ps1 -VerifyDownload` 校验本地与远端资产（含安装包）；桌面端索引回归用 `tools/run-isolated.ps1`。
 
 ## 数据如何流动
 

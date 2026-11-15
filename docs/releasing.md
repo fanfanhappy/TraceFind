@@ -1,6 +1,6 @@
 # 发布流程
 
-这个项目是单人维护的 Windows 桌面应用：单 exe、无安装器、无自动更新。发布的作用只有一个——**给用户一个可下载、可回滚、说得清的版本**。
+这个项目是单人维护的 Windows 桌面应用：提供便携 zip 与可选目录的安装包，并带应用内一键更新。发布的作用只有一个——**给用户一个可下载、可回滚、说得清的版本**。
 
 ## 什么时候发
 
@@ -58,10 +58,10 @@ src-tauri/tauri.conf.json  "version": "2.0.0"
 
 1. **改版本号**：上面三处 + `docs/release-<版本>.md` 发布说明
 2. **自测**：`cargo test`、启动应用、跑一遍关键路径
-3. **打包**：`tools/package-release.ps1 -Version <版本>`，产物在 `release/`
+3. **打包**：`tools/package-release.ps1 -Version <版本>`，产物在 `release/`（zip + setup.exe，各带 `.sha256`）
 4. **更新 README**：发布说明链接、界面截图（有 UI 变化时重拍）
 5. **提交并打 tag**：`git tag v<版本>` 指向本次提交
-6. **建 draft release**：上传 zip 与 `.sha256`
+6. **建 draft release**：上传 4 个资产（zip、zip.sha256、setup.exe、setup.exe.sha256）
 7. **验收**：`tools/check-release.ps1` 全绿之后再 publish
 8. **publish 后**：确认 GitHub 上 `Latest` 指向新版本，旧版本按需删除
 
@@ -71,9 +71,9 @@ src-tauri/tauri.conf.json  "version": "2.0.0"
 |---|---|
 | 三处版本号一致 | `tools/check-release.ps1` |
 | tag 存在且指向仓库提交 | 同上 |
-| zip 与 `.sha256` 匹配 | 同上 |
+| zip / setup.exe 与各自 `.sha256` 匹配 | 同上 |
 | Release 已上传且资产名正确 | 同上 |
-| 远端资产 sha256 与本地一致 | `check-release.ps1 -VerifyDownload` |
+| 远端 zip / 安装包 sha256 与本地一致 | `check-release.ps1 -VerifyDownload` |
 | README 链接指向存在的说明文件 | 同上 |
 | `latest` 指向本版本 | 同上 |
 | 界面截图是最新界面 | 人工：`docs/screens` 与当前 UI 对照 |
